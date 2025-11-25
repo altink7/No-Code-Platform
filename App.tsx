@@ -8,6 +8,7 @@ import { ScreenEditor } from './components/Builder/ScreenEditor';
 import { Button } from './components/UI';
 import { ExportModal } from './components/ExportModal';
 import { PreviewModal } from './components/PreviewModal';
+import { HelpModal } from './components/HelpModal';
 
 const INITIAL_PROJECT: Project = {
   name: '',
@@ -31,6 +32,7 @@ export default function App() {
   const [activeScreenId, setActiveScreenId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [isPreviewing, setIsPreviewing] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
 
   const handlePlatformSelect = (platform: AppPlatform) => {
     setProject(prev => ({ ...prev, platform }));
@@ -140,7 +142,14 @@ export default function App() {
           </div>
         )}
 
-        <div className="flex gap-3">
+        <div className="flex gap-3 items-center">
+           <button 
+             onClick={() => setShowHelp(true)}
+             className="w-8 h-8 rounded-full border border-slate-700 text-slate-400 hover:text-white hover:border-cyan-500 transition-colors flex items-center justify-center font-bold text-sm mr-2"
+             title="Help & Documentation"
+           >
+             ?
+           </button>
            {step === 'builder' && (
              <>
                 <Button variant="secondary" size="sm" onClick={() => setIsPreviewing(true)}>
@@ -229,6 +238,10 @@ export default function App() {
             project={project}
             onClose={() => setIsPreviewing(false)}
           />
+      )}
+
+      {showHelp && (
+          <HelpModal onClose={() => setShowHelp(false)} />
       )}
     </div>
   );
