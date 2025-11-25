@@ -75,7 +75,18 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({ project, onClose }) 
 
     if (comp.type === 'Group') {
         return (
-            <div key={comp.id} style={{ ...commonStyle, display: 'flex', flexDirection: 'column' }}>
+            <div 
+                key={comp.id} 
+                style={{ 
+                    ...commonStyle, 
+                    display: 'flex', 
+                    flexDirection: comp.style?.flexDirection || 'column',
+                    gap: comp.style?.gap ? `${comp.style.gap}px` : undefined,
+                    justifyContent: comp.style?.justifyContent,
+                    alignItems: comp.style?.alignItems,
+                    flexWrap: comp.style?.flexWrap
+                }}
+            >
                 {comp.children?.map(child => renderRuntimeComponent(child))}
             </div>
         );

@@ -29,6 +29,7 @@ export interface ComponentStyle {
   justifyContent?: 'flex-start' | 'center' | 'flex-end' | 'space-between';
   alignItems?: 'flex-start' | 'center' | 'flex-end';
   flexDirection?: 'row' | 'column';
+  flexWrap?: 'wrap' | 'nowrap';
   gap?: number;
 }
 

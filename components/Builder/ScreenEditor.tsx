@@ -313,11 +313,20 @@ export const ScreenEditor: React.FC<ScreenEditorProps> = ({ screen, onBack, onUp
                        )}
                   </div>
                   {!comp.props.collapsed && (
-                      <div className="p-2 flex flex-col min-h-[40px]">
+                      <div 
+                        className="p-2 flex min-h-[40px]"
+                        style={{
+                            flexDirection: comp.style?.flexDirection || 'column',
+                            gap: comp.style?.gap || 0,
+                            justifyContent: comp.style?.justifyContent || 'flex-start',
+                            alignItems: comp.style?.alignItems || 'stretch',
+                            flexWrap: comp.style?.flexWrap || 'nowrap'
+                        }}
+                      >
                            {comp.children && comp.children.length > 0 ? (
                                renderComponentTree(comp.children)
                            ) : (
-                               <div className="text-center text-slate-600 text-xs py-2 italic">Empty Group</div>
+                               <div className="w-full text-center text-slate-600 text-xs py-2 italic">Empty Group</div>
                            )}
                       </div>
                   )}
@@ -425,7 +434,7 @@ export const ScreenEditor: React.FC<ScreenEditorProps> = ({ screen, onBack, onUp
                     onClick={() => setPropertiesTab('style')}
                     className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider ${propertiesTab === 'style' ? 'text-cyan-400 border-b-2 border-cyan-400 bg-slate-800/30' : 'text-slate-500 hover:text-slate-300'}`}
                   >
-                      Appearance
+                      Style
                   </button>
               </div>
 
@@ -540,6 +549,51 @@ export const ScreenEditor: React.FC<ScreenEditorProps> = ({ screen, onBack, onUp
                   ) : (
                       <>
                         <div className="space-y-4">
+                            {/* Layout Controls for Groups */}
+                            {comp.type === 'Group' && (
+                                <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700/50 space-y-3">
+                                    <Label className="text-cyan-400">Layout</Label>
+                                    <div className="flex bg-slate-800 rounded p-1 border border-slate-700">
+                                        <button 
+                                            onClick={() => updateSelectedComponent({ style: { flexDirection: 'column' } })}
+                                            className={`flex-1 py-1 text-xs rounded ${comp.style?.flexDirection !== 'row' ? 'bg-cyan-500 text-black shadow-sm' : 'text-slate-400 hover:text-white'}`}
+                                        >
+                                            Column ( ↓ )
+                                        </button>
+                                        <button 
+                                            onClick={() => updateSelectedComponent({ style: { flexDirection: 'row' } })}
+                                            className={`flex-1 py-1 text-xs rounded ${comp.style?.flexDirection === 'row' ? 'bg-cyan-500 text-black shadow-sm' : 'text-slate-400 hover:text-white'}`}
+                                        >
+                                            Row ( → )
+                                        </button>
+                                    </div>
+                                    
+                                    <div>
+                                        <Label>Gap: {comp.style?.gap || 0}px</Label>
+                                        <input 
+                                            type="range" min="0" max="64" step="4"
+                                            value={comp.style?.gap || 0}
+                                            onChange={(e) => updateSelectedComponent({ style: { gap: parseInt(e.target.value) } })}
+                                            className="w-full accent-cyan-500"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <Label>Align Items</Label>
+                                        <Select
+                                            value={comp.style?.alignItems || 'stretch'}
+                                            onChange={(e) => updateSelectedComponent({ style: { alignItems: e.target.value as any } })}
+                                            options={[
+                                                { label: 'Stretch', value: 'stretch' },
+                                                { label: 'Start', value: 'flex-start' },
+                                                { label: 'Center', value: 'center' },
+                                                { label: 'End', value: 'flex-end' },
+                                            ]}
+                                        />
+                                    </div>
+                                </div>
+                            )}
+
                             <div>
                                 <Label>Margin</Label>
                                 <input 
