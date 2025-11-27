@@ -1,5 +1,5 @@
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Project, AppPlatform, Step, Screen } from './types';
 import { SetupWizard, PlatformSelection } from './components/Setup';
 import { TemplateSelector } from './components/TemplateSelector';
@@ -9,24 +9,15 @@ import { Button } from './components/UI';
 import { ExportModal } from './components/ExportModal';
 import { PreviewModal } from './components/PreviewModal';
 import { HelpModal } from './components/HelpModal';
-
-const INITIAL_PROJECT: Project = {
-  name: '',
-  description: '',
-  platform: 'web',
-  template: 'blank',
-  colors: {
-    primary: '#06b6d4',
-    secondary: '#d946ef',
-    background: '#0f172a',
-    text: '#f8fafc'
-  },
-  font: { name: 'Inter', family: 'sans-serif' },
-  screens: []
-};
+import { Dashboard } from './components/Dashboard';
 
 export default function App() {
-  const [project, setProject] = useState<Project>(INITIAL_PROJECT);
+  // Global State
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [currentProject, setCurrentProject] = useState<Project | null>(null);
+  const [view, setView] = useState<'dashboard' | 'builder'>('dashboard');
+  
+  // Builder State
   const [step, setStep] = useState<Step>('setup');
   const [builderView, setBuilderView] = useState<'flow' | 'editor'>('flow');
   const [activeScreenId, setActiveScreenId] = useState<string | null>(null);
@@ -34,70 +25,148 @@ export default function App() {
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
 
+  // Load projects from local storage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('nebula_projects');
+    if (saved) {
+      try {
+        setProjects(JSON.parse(saved));
+      } catch (e) {
+        console.error("Failed to load projects", e);
+      }
+    }
+  }, []);
+
+  // Save projects to local storage whenever they change
+  useEffect(() => {
+    localStorage.setItem('nebula_projects', JSON.stringify(projects));
+  }, [projects]);
+
+  // Save current project state to projects list
+  useEffect(() => {
+    if (currentProject) {
+      setProjects(prev => prev.map(p => p.id === currentProject.id ? { ...currentProject, lastModified: Date.now() } : p));
+    }
+  }, [currentProject]);
+
+  const handleCreateNew = () => {
+    const newProject: Project = {
+      id: Date.now().toString(),
+      name: '',
+      description: '',
+      platform: 'web',
+      template: 'blank',
+      colors: {
+        primary: '#06b6d4',
+        secondary: '#d946ef',
+        background: '#0f172a',
+        text: '#f8fafc'
+      },
+      font: { name: 'Inter', family: 'sans-serif' },
+      screens: [],
+      lastModified: Date.now()
+    };
+    setCurrentProject(newProject);
+    setStep('setup');
+    setBuilderView('flow');
+    setView('builder');
+  };
+
+  const handleOpenProject = (project: Project) => {
+    setCurrentProject(project);
+    setStep('builder'); // Skip setup for existing projects
+    setBuilderView('flow');
+    setView('builder');
+  };
+
+  const handleDeleteProject = (projectId: string) => {
+    if (window.confirm("Are you sure you want to delete this project?")) {
+      setProjects(prev => prev.filter(p => p.id !== projectId));
+      if (currentProject?.id === projectId) {
+        setView('dashboard');
+        setCurrentProject(null);
+      }
+    }
+  };
+
+  const handleBackToDashboard = () => {
+    setView('dashboard');
+    setCurrentProject(null);
+  };
+
+  // Builder Logic
   const handlePlatformSelect = (platform: AppPlatform) => {
-    setProject(prev => ({ ...prev, platform }));
+    if (!currentProject) return;
+    setCurrentProject({ ...currentProject, platform });
     setStep('template');
   };
 
   const handleTemplateSelect = (templateId: string, screens: Screen[]) => {
-    setProject(prev => ({ ...prev, template: templateId, screens }));
+    if (!currentProject) return;
+    setCurrentProject({ ...currentProject, template: templateId, screens });
+    
+    // Add new project to list if not already there (though handleCreateNew handles init, this confirms it)
+    if (!projects.find(p => p.id === currentProject.id)) {
+        setProjects(prev => [...prev, { ...currentProject, template: templateId, screens }]);
+    }
     setStep('builder');
   };
 
   const updateScreen = (updatedScreen: Screen) => {
-    setProject(prev => ({
+    if (!currentProject) return;
+    setCurrentProject(prev => prev ? ({
       ...prev,
       screens: prev.screens.map(s => s.id === updatedScreen.id ? updatedScreen : s)
-    }));
+    }) : null);
   };
 
   const moveScreen = useCallback((id: string, x: number, y: number) => {
-    setProject(prev => ({
-      ...prev,
-      screens: prev.screens.map(s => s.id === id ? { ...s, x, y } : s)
-    }));
+    setCurrentProject(prev => {
+        if (!prev) return null;
+        return {
+            ...prev,
+            screens: prev.screens.map(s => s.id === id ? { ...s, x, y } : s)
+        };
+    });
   }, []);
 
   const addScreen = () => {
+    if (!currentProject) return;
     const id = `screen-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
-    // Simple cascade effect
-    const count = project.screens.length;
-    const startX = 50;
-    const startY = 50;
-    const offset = 30; 
     
-    // Ensure it wraps if it goes too far
-    const x = startX + (count * offset) % 400;
-    const y = startY + (count * offset) % 300;
+    // Vertical stacking logic
+    const lastScreen = currentProject.screens.length > 0 ? currentProject.screens[currentProject.screens.length - 1] : null;
+    const x = lastScreen ? lastScreen.x : 100;
+    const y = lastScreen ? lastScreen.y + 350 : 100; // Increased spacing for vertical stack
     
     const newScreen: Screen = {
         id: id,
-        name: `Screen ${count + 1}`,
+        name: `Screen ${currentProject.screens.length + 1}`,
         x: x,
         y: y,
         components: [],
         connections: []
     };
-    setProject(prev => ({...prev, screens: [...prev.screens, newScreen]}));
+    setCurrentProject(prev => prev ? ({...prev, screens: [...prev.screens, newScreen]}) : null);
   };
 
   const addConnection = (sourceId: string, targetId: string) => {
-    if (sourceId === targetId) return; // No self loops
-    setProject(prev => ({
+    if (sourceId === targetId || !currentProject) return;
+    setCurrentProject(prev => prev ? ({
       ...prev,
       screens: prev.screens.map(s => {
         if (s.id === sourceId) {
-            // Check if connection already exists
             if (s.connections.includes(targetId)) return s;
             return { ...s, connections: [...s.connections, targetId] };
         }
         return s;
       })
-    }));
+    }) : null);
   };
 
   const removeConnection = (sourceId: string, targetId: string) => {
-    setProject(prev => ({
+    if (!currentProject) return;
+    setCurrentProject(prev => prev ? ({
       ...prev,
       screens: prev.screens.map(s => {
         if (s.id === sourceId) {
@@ -105,7 +174,7 @@ export default function App() {
         }
         return s;
       })
-    }));
+    }) : null);
   };
 
   const enterScreenEditor = (id: string) => {
@@ -123,20 +192,24 @@ export default function App() {
       
       {/* Top Navigation Bar */}
       <header className="h-16 border-b border-slate-800 bg-slate-900/80 backdrop-blur z-50 flex items-center justify-between px-6 shrink-0">
-        <div className="flex items-center gap-2 cursor-pointer" onClick={() => setStep('setup')}>
+        <div className="flex items-center gap-2 cursor-pointer" onClick={() => setView('dashboard')}>
            <div className="w-8 h-8 bg-gradient-to-tr from-cyan-500 to-fuchsia-600 rounded-lg flex items-center justify-center font-bold text-white text-lg">N</div>
            <span className="font-bold text-lg tracking-tight">NebulaBuilder</span>
         </div>
         
-        {project.name && (
+        {view === 'builder' && currentProject && (
           <div className="flex items-center gap-4 text-sm text-slate-400">
-             <span>{project.name}</span>
+             <button onClick={handleBackToDashboard} className="hover:text-white transition-colors flex items-center gap-1">
+                 <span className="text-lg">←</span> Back
+             </button>
              <span className="w-1 h-1 bg-slate-600 rounded-full"></span>
-             <span className="capitalize">{project.platform}</span>
+             <span className="font-bold text-white">{currentProject.name || 'Untitled'}</span>
+             <span className="w-1 h-1 bg-slate-600 rounded-full"></span>
+             <span className="capitalize">{currentProject.platform}</span>
              {step === 'builder' && (
                  <>
                     <span className="w-1 h-1 bg-slate-600 rounded-full"></span>
-                    <span className="text-cyan-400">{project.screens.length} Screens</span>
+                    <span className="text-cyan-400">{currentProject.screens.length} Screens</span>
                  </>
              )}
           </div>
@@ -150,7 +223,7 @@ export default function App() {
            >
              ?
            </button>
-           {step === 'builder' && (
+           {view === 'builder' && step === 'builder' && (
              <>
                 <Button variant="secondary" size="sm" onClick={() => setIsPreviewing(true)}>
                     ▶ Preview App
@@ -164,78 +237,94 @@ export default function App() {
       {/* Main Content Area */}
       <main className="flex-1 relative overflow-hidden flex flex-col min-h-0">
         
-        {step === 'setup' && (
-          <div className="flex-1 flex items-center justify-center p-6 overflow-y-auto">
-             <SetupWizard 
-                project={project} 
-                setProject={setProject} 
-                onNext={() => setStep('platform')} 
-                currentStep="setup"
+        {view === 'dashboard' && (
+             <Dashboard 
+                projects={projects}
+                onCreateNew={handleCreateNew}
+                onOpenProject={handleOpenProject}
+                onDeleteProject={handleDeleteProject}
              />
-          </div>
         )}
 
-        {step === 'platform' && (
-          <div className="flex-1 flex items-center justify-center p-6 overflow-y-auto">
-            <PlatformSelection onSelect={handlePlatformSelect} />
-          </div>
-        )}
+        {view === 'builder' && currentProject && (
+            <>
+                {step === 'setup' && (
+                <div className="flex-1 flex items-center justify-center p-6 overflow-y-auto">
+                    <SetupWizard 
+                        project={currentProject} 
+                        setProject={setCurrentProject} 
+                        onNext={() => setStep('platform')} 
+                        currentStep="setup"
+                    />
+                </div>
+                )}
 
-        {step === 'template' && (
-          <div className="flex-1 flex flex-col p-6 overflow-y-auto">
-            <TemplateSelector onSelect={handleTemplateSelect} platform={project.platform} />
-          </div>
-        )}
+                {step === 'platform' && (
+                <div className="flex-1 flex items-center justify-center p-6 overflow-y-auto">
+                    <PlatformSelection onSelect={handlePlatformSelect} />
+                </div>
+                )}
 
-        {step === 'builder' && (
-          <div className="flex-1 w-full h-full relative bg-slate-950 overflow-hidden">
-             {builderView === 'flow' ? (
-                <>
-                   {/* Toolbar */}
-                   <div className="absolute top-6 left-6 z-30 flex flex-col gap-2 pointer-events-none">
-                      <div className="pointer-events-auto">
-                        <Button size="sm" onClick={addScreen} className="shadow-lg shadow-cyan-500/20 w-full bg-slate-900/90 backdrop-blur border border-cyan-500/50 hover:bg-slate-800">
-                            + Add Screen
-                        </Button>
-                      </div>
-                      <div className="bg-slate-900/90 backdrop-blur p-3 rounded-lg border border-slate-700 text-xs text-slate-400 space-y-1 shadow-xl pointer-events-auto">
-                          <p>🖱️ <strong>Drag</strong> to move screens</p>
-                          <p>🔗 <strong>Drag from dot</strong> to connect</p>
-                          <p>👆 <strong>Click</strong> to edit UI</p>
-                      </div>
-                   </div>
-                   
-                   <FlowView 
-                      screens={project.screens} 
-                      onScreenClick={enterScreenEditor}
-                      onScreenMove={moveScreen}
-                      onConnect={addConnection}
-                      onDisconnect={removeConnection}
-                   />
-                </>
-             ) : (
-                <ScreenEditor 
-                  screen={project.screens.find(s => s.id === activeScreenId)!} 
-                  onBack={exitScreenEditor}
-                  onUpdateScreen={updateScreen}
-                  allScreens={project.screens}
-                />
-             )}
-          </div>
+                {step === 'template' && (
+                <div className="flex-1 flex flex-col p-6 overflow-y-auto">
+                    <TemplateSelector onSelect={handleTemplateSelect} platform={currentProject.platform} />
+                </div>
+                )}
+
+                {step === 'builder' && (
+                <div className="flex-1 w-full h-full relative bg-slate-950 overflow-hidden">
+                    {builderView === 'flow' ? (
+                        <>
+                        {/* Toolbar */}
+                        <div className="absolute top-6 left-6 z-30 flex flex-col gap-2 pointer-events-none">
+                            <div className="pointer-events-auto">
+                                <button 
+                                    onClick={addScreen} 
+                                    className="w-full px-6 py-3 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded-xl shadow-[0_0_20px_rgba(6,182,212,0.4)] border border-cyan-400 transition-all transform hover:scale-105 active:scale-95 flex items-center gap-2 justify-center"
+                                >
+                                    <span className="text-xl">+</span> Add Screen
+                                </button>
+                            </div>
+                            <div className="bg-slate-900/90 backdrop-blur p-3 rounded-lg border border-slate-700 text-xs text-slate-400 space-y-1 shadow-xl pointer-events-auto">
+                                <p>🖱️ <strong>Drag</strong> to move screens</p>
+                                <p>🔗 <strong>Drag from dot</strong> to connect</p>
+                                <p>👆 <strong>Click</strong> to edit UI</p>
+                            </div>
+                        </div>
+                        
+                        <FlowView 
+                            screens={currentProject.screens} 
+                            onScreenClick={enterScreenEditor}
+                            onScreenMove={moveScreen}
+                            onConnect={addConnection}
+                            onDisconnect={removeConnection}
+                        />
+                        </>
+                    ) : (
+                        <ScreenEditor 
+                        screen={currentProject.screens.find(s => s.id === activeScreenId)!} 
+                        onBack={exitScreenEditor}
+                        onUpdateScreen={updateScreen}
+                        allScreens={currentProject.screens}
+                        />
+                    )}
+                </div>
+                )}
+            </>
         )}
 
       </main>
 
-      {isExporting && (
+      {isExporting && currentProject && (
           <ExportModal 
-            project={project} 
+            project={currentProject} 
             onClose={() => setIsExporting(false)} 
           />
       )}
 
-      {isPreviewing && (
+      {isPreviewing && currentProject && (
           <PreviewModal 
-            project={project}
+            project={currentProject}
             onClose={() => setIsPreviewing(false)}
           />
       )}

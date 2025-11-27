@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { Project, Screen } from "../types";
 
@@ -16,10 +17,12 @@ export const generateAppStructure = async (
   const systemInstruction = `
     You are an expert UI/UX architect for a No-Code platform.
     Your task is to generate a JSON structure for a ${platform} application based on the user's description.
-    You must create a list of screens. Each screen should have a logical name, x/y coordinates (spread them out for a flow chart, x between 0-800, y between 0-600),
+    You must create a list of screens. Each screen should have a logical name, x/y coordinates (IMPORTANT: Place screens vertically under each other in a single column, starting at y=100 and increasing y by 300 for each screen, keeping x=100),
     connections (ids of other screens it flows to), and a list of components.
     
-    Available component types: 'Button', 'Input', 'Text', 'Image', 'Card', 'Header', 'List', 'Map', 'Group', 'Dropdown'.
+    Available component types: 
+    'Button', 'Input', 'Text', 'Image', 'Card', 'Header', 'List', 'Map', 'Group', 'Dropdown',
+    'Checkbox', 'Switch', 'Slider', 'Avatar', 'Badge', 'Divider', 'TextArea'.
     
     IMPORTANT: You can nest components inside a 'Group' component using the 'children' property.
     Use Groups to create layouts (e.g., row layouts, cards with specific content).
@@ -55,8 +58,46 @@ export const generateAppStructure = async (
                     id: { type: Type.STRING },
                     type: { type: Type.STRING },
                     label: { type: Type.STRING },
-                    props: { type: Type.OBJECT, properties: {} },
-                    style: { type: Type.OBJECT, properties: {} },
+                    props: { 
+                      type: Type.OBJECT, 
+                      properties: {
+                        variant: { type: Type.STRING },
+                        placeholder: { type: Type.STRING },
+                        text: { type: Type.STRING },
+                        src: { type: Type.STRING },
+                        collapsible: { type: Type.BOOLEAN },
+                        collapsed: { type: Type.BOOLEAN },
+                        options: { type: Type.ARRAY, items: { type: Type.STRING } },
+                        align: { type: Type.STRING },
+                        size: { type: Type.STRING },
+                        showImage: { type: Type.BOOLEAN },
+                        defaultChecked: { type: Type.BOOLEAN },
+                        min: { type: Type.NUMBER },
+                        max: { type: Type.NUMBER },
+                        step: { type: Type.NUMBER },
+                        value: { type: Type.NUMBER }
+                      } 
+                    },
+                    style: { 
+                      type: Type.OBJECT, 
+                      properties: {
+                        backgroundColor: { type: Type.STRING },
+                        color: { type: Type.STRING },
+                        width: { type: Type.STRING },
+                        height: { type: Type.STRING },
+                        padding: { type: Type.NUMBER },
+                        margin: { type: Type.NUMBER },
+                        borderRadius: { type: Type.NUMBER },
+                        borderWidth: { type: Type.NUMBER },
+                        borderColor: { type: Type.STRING },
+                        flexDirection: { type: Type.STRING },
+                        justifyContent: { type: Type.STRING },
+                        alignItems: { type: Type.STRING },
+                        flexWrap: { type: Type.STRING },
+                        gap: { type: Type.NUMBER },
+                        fontWeight: { type: Type.STRING }
+                      } 
+                    },
                     children: { 
                         type: Type.ARRAY,
                         items: {
@@ -64,10 +105,48 @@ export const generateAppStructure = async (
                              properties: {
                                 id: { type: Type.STRING },
                                 type: { type: Type.STRING },
-                                label: { type: Type.STRING }
+                                label: { type: Type.STRING },
+                                props: {
+                                  type: Type.OBJECT,
+                                  properties: {
+                                    variant: { type: Type.STRING },
+                                    placeholder: { type: Type.STRING },
+                                    text: { type: Type.STRING },
+                                    src: { type: Type.STRING },
+                                    collapsible: { type: Type.BOOLEAN },
+                                    collapsed: { type: Type.BOOLEAN },
+                                    options: { type: Type.ARRAY, items: { type: Type.STRING } },
+                                    align: { type: Type.STRING },
+                                    size: { type: Type.STRING },
+                                    showImage: { type: Type.BOOLEAN },
+                                    defaultChecked: { type: Type.BOOLEAN },
+                                    min: { type: Type.NUMBER },
+                                    max: { type: Type.NUMBER },
+                                    step: { type: Type.NUMBER },
+                                    value: { type: Type.NUMBER }
+                                  }
+                                },
+                                style: {
+                                  type: Type.OBJECT,
+                                  properties: {
+                                    backgroundColor: { type: Type.STRING },
+                                    color: { type: Type.STRING },
+                                    width: { type: Type.STRING },
+                                    height: { type: Type.STRING },
+                                    padding: { type: Type.NUMBER },
+                                    margin: { type: Type.NUMBER },
+                                    borderRadius: { type: Type.NUMBER },
+                                    borderWidth: { type: Type.NUMBER },
+                                    borderColor: { type: Type.STRING },
+                                    flexDirection: { type: Type.STRING },
+                                    justifyContent: { type: Type.STRING },
+                                    alignItems: { type: Type.STRING },
+                                    flexWrap: { type: Type.STRING },
+                                    gap: { type: Type.NUMBER },
+                                    fontWeight: { type: Type.STRING }
+                                  }
+                                }
                              }
-                             // Recursive schema definition is tricky in simple JSON schema, 
-                             // but the model usually understands the concept of nesting if the root is defined well.
                         }
                     } 
                   },

@@ -11,7 +11,7 @@ interface PreviewModalProps {
 export const PreviewModal: React.FC<PreviewModalProps> = ({ project, onClose }) => {
   const [currentScreenId, setCurrentScreenId] = useState<string | null>(null);
   const [history, setHistory] = useState<string[]>([]);
-  const [inputValues, setInputValues] = useState<Record<string, string>>({});
+  const [inputValues, setInputValues] = useState<Record<string, string | boolean | number>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -40,11 +40,13 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({ project, onClose }) 
       }
   };
 
-  const validateInput = (componentId: string, value: string, rules: any): string | null => {
+  const validateInput = (componentId: string, value: any, rules: any): string | null => {
       if (!rules) return null;
-      if (rules.required && !value) return rules.errorMessage || 'This field is required';
-      if (rules.minLength && value.length < rules.minLength) return rules.errorMessage || `Min ${rules.minLength} chars required`;
-      if (rules.pattern && !new RegExp(rules.pattern).test(value)) return rules.errorMessage || 'Invalid format';
+      if (typeof value === 'string') {
+          if (rules.required && !value) return rules.errorMessage || 'This field is required';
+          if (rules.minLength && value.length < rules.minLength) return rules.errorMessage || `Min ${rules.minLength} chars required`;
+          if (rules.pattern && !new RegExp(rules.pattern).test(value)) return rules.errorMessage || 'Invalid format';
+      }
       return null;
   };
 
@@ -54,9 +56,6 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({ project, onClose }) 
       if (action.type === 'navigate') {
           handleNavigate(action.targetId);
       } else if (action.type === 'submit') {
-          // Validate all inputs on current screen
-          // Simplified: Just validate inputs that are present in inputValues or have rules
-          // For a real app, we'd traverse the screen components to find all inputs.
           alert("Form Submitted! (Simulation)");
       }
   };
@@ -71,6 +70,7 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({ project, onClose }) 
         borderColor: comp.style?.borderColor,
         color: comp.style?.color,
         width: comp.style?.width,
+        fontWeight: comp.style?.fontWeight,
     };
 
     if (comp.type === 'Group') {
@@ -96,12 +96,12 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({ project, onClose }) 
         return (
             <button
                 key={comp.id}
-                onClick={() => handleAction(comp.props.action)}
+                onClick={() => handleAction(comp.props?.action)}
                 className="transition-transform active:scale-95"
                 style={{
                     ...commonStyle,
-                    backgroundColor: comp.props.variant === 'secondary' ? '#334155' : project.colors.primary,
-                    color: comp.props.variant === 'secondary' ? 'white' : project.colors.text === '#f8fafc' ? 'black' : 'white',
+                    backgroundColor: comp.props?.variant === 'secondary' ? '#334155' : project.colors.primary,
+                    color: comp.props?.variant === 'secondary' ? 'white' : project.colors.text === '#f8fafc' ? 'black' : 'white',
                     padding: comp.style?.padding || 12,
                     borderRadius: comp.style?.borderRadius || 8,
                     width: comp.style?.width || '100%',
@@ -114,26 +114,28 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({ project, onClose }) 
         );
     }
 
-    if (comp.type === 'Input') {
+    if (comp.type === 'Input' || comp.type === 'TextArea') {
         const error = errors[comp.id];
+        const Element = comp.type === 'TextArea' ? 'textarea' : 'input';
+        
         return (
             <div key={comp.id} style={{ ...commonStyle, marginBottom: (commonStyle.margin || 0) + 10 }}>
                 <label className="block text-xs font-bold text-slate-500 mb-1">{comp.label}</label>
-                <input
-                    type="text"
-                    value={inputValues[comp.id] || ''}
-                    placeholder={comp.props.placeholder}
-                    onChange={(e) => {
+                <Element
+                    type={comp.type === 'Input' ? 'text' : undefined}
+                    value={(inputValues[comp.id] as string) || ''}
+                    placeholder={comp.props?.placeholder}
+                    onChange={(e: any) => {
                         const val = e.target.value;
                         setInputValues(prev => ({...prev, [comp.id]: val}));
-                        const err = validateInput(comp.id, val, comp.props.validation);
+                        const err = validateInput(comp.id, val, comp.props?.validation);
                         setErrors(prev => ({...prev, [comp.id]: err || ''}));
                     }}
                     onBlur={() => {
-                        const err = validateInput(comp.id, inputValues[comp.id], comp.props.validation);
+                        const err = validateInput(comp.id, inputValues[comp.id], comp.props?.validation);
                         setErrors(prev => ({...prev, [comp.id]: err || ''}));
                     }}
-                    className={`w-full px-3 py-2 bg-slate-100 dark:bg-slate-800 border rounded text-sm text-slate-300 focus:outline-none transition-all ${error ? 'border-red-500 ring-1 ring-red-500' : 'border-slate-700 focus:border-cyan-500'}`}
+                    className={`w-full px-3 py-2 bg-slate-100 dark:bg-slate-800 border rounded text-sm text-slate-300 focus:outline-none transition-all ${error ? 'border-red-500 ring-1 ring-red-500' : 'border-slate-700 focus:border-cyan-500'} ${comp.type === 'TextArea' ? 'h-24 resize-none' : ''}`}
                 />
                 {error && <span className="text-[10px] text-red-400 mt-1 block">{error}</span>}
             </div>
@@ -146,15 +148,100 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({ project, onClose }) 
                 <label className="block text-xs font-bold text-slate-500 mb-1">{comp.label}</label>
                 <select 
                     className="w-full px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-700 rounded text-sm text-slate-300 focus:outline-none"
-                    value={inputValues[comp.id] || ''}
+                    value={(inputValues[comp.id] as string) || ''}
                     onChange={(e) => setInputValues(prev => ({...prev, [comp.id]: e.target.value}))}
                 >
                     <option value="">Select...</option>
-                    {comp.props.options?.map((opt: string) => (
+                    {comp.props?.options?.map((opt: string) => (
                         <option key={opt} value={opt}>{opt}</option>
                     ))}
                 </select>
              </div>
+        );
+    }
+
+    if (comp.type === 'Checkbox') {
+        const checked = (inputValues[comp.id] !== undefined ? inputValues[comp.id] : comp.props?.defaultChecked) as boolean;
+        return (
+            <div key={comp.id} style={commonStyle} className="flex items-center gap-3 cursor-pointer" onClick={() => setInputValues(prev => ({...prev, [comp.id]: !checked}))}>
+                <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${checked ? 'bg-cyan-500 border-cyan-500' : 'border-slate-600 bg-slate-800'}`}>
+                    {checked && <span className="text-white text-xs">✓</span>}
+                </div>
+                <span className="text-sm text-slate-300 select-none">{comp.label}</span>
+            </div>
+        );
+    }
+
+    if (comp.type === 'Switch') {
+         const checked = (inputValues[comp.id] !== undefined ? inputValues[comp.id] : comp.props?.defaultChecked) as boolean;
+         return (
+             <div key={comp.id} style={commonStyle} className="flex items-center justify-between cursor-pointer" onClick={() => setInputValues(prev => ({...prev, [comp.id]: !checked}))}>
+                 <span className="text-sm text-slate-300 select-none">{comp.label}</span>
+                 <div className={`w-10 h-6 rounded-full p-1 transition-colors duration-200 ${checked ? 'bg-cyan-500' : 'bg-slate-700'}`}>
+                     <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform duration-200 ${checked ? 'translate-x-4' : ''}`}></div>
+                 </div>
+             </div>
+         );
+    }
+
+    if (comp.type === 'Slider') {
+        const val = (inputValues[comp.id] !== undefined ? inputValues[comp.id] : comp.props?.value || 50) as number;
+        return (
+            <div key={comp.id} style={commonStyle}>
+                <div className="flex justify-between mb-1">
+                    <span className="text-xs font-bold text-slate-500">{comp.label}</span>
+                    <span className="text-xs text-slate-400">{val}</span>
+                </div>
+                <input 
+                    type="range"
+                    min={comp.props?.min || 0}
+                    max={comp.props?.max || 100}
+                    value={val}
+                    onChange={(e) => setInputValues(prev => ({...prev, [comp.id]: parseInt(e.target.value)}))}
+                    className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+                />
+            </div>
+        );
+    }
+    
+    if (comp.type === 'Avatar') {
+        return (
+            <div key={comp.id} className="flex justify-center" style={commonStyle}>
+                <div className="bg-slate-700 rounded-full flex items-center justify-center overflow-hidden border border-slate-600"
+                    style={{ width: comp.props?.size || 48, height: comp.props?.size || 48 }}
+                >
+                    {comp.props?.src ? (
+                        <img src={comp.props.src} alt="avatar" className="w-full h-full object-cover" />
+                    ) : (
+                        <span className="text-slate-400 font-bold text-lg">A</span>
+                    )}
+                </div>
+            </div>
+        );
+    }
+
+    if (comp.type === 'Badge') {
+         const badgeColors: Record<string, string> = {
+            info: 'bg-blue-500/20 text-blue-400 border-blue-500/50',
+            success: 'bg-green-500/20 text-green-400 border-green-500/50',
+            warning: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/50',
+            error: 'bg-red-500/20 text-red-400 border-red-500/50',
+        };
+        const variant = comp.props?.variant || 'info';
+        return (
+            <div key={comp.id} style={commonStyle} className="inline-block">
+                <span className={`px-2 py-0.5 rounded text-xs font-medium border ${badgeColors[variant] || badgeColors.info}`}>
+                    {comp.label}
+                </span>
+            </div>
+        );
+    }
+
+    if (comp.type === 'Divider') {
+        return (
+            <div key={comp.id} style={commonStyle} className="w-full flex items-center py-2">
+                 <div className="h-px bg-slate-700 w-full"></div>
+            </div>
         );
     }
 
@@ -174,14 +261,14 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({ project, onClose }) 
 
     if (comp.type === 'Text') {
         return (
-            <p key={comp.id} style={{ ...commonStyle, textAlign: comp.props.align }}>{comp.label}</p>
+            <p key={comp.id} style={{ ...commonStyle, textAlign: comp.props?.align }}>{comp.label}</p>
         );
     }
     
     if (comp.type === 'Card') {
         return (
             <div key={comp.id} className="bg-slate-800 rounded-xl p-4 shadow-lg border border-slate-700" style={commonStyle}>
-                 {comp.props.showImage !== false && <div className="h-32 bg-slate-700 rounded-lg w-full mb-2 bg-cover bg-center" style={{backgroundImage: 'url(https://picsum.photos/400/200)'}}></div>}
+                 {comp.props?.showImage !== false && <div className="h-32 bg-slate-700 rounded-lg w-full mb-2 bg-cover bg-center" style={{backgroundImage: 'url(https://picsum.photos/400/200)'}}></div>}
                  <h4 className="font-bold text-slate-200">{comp.label}</h4>
                  <p className="text-slate-400 text-sm mt-1">Sample content for the card component.</p>
             </div>
