@@ -20,7 +20,175 @@ export const ScreenEditor: React.FC<ScreenEditorProps> = ({ screen, onBack, onUp
   const [viewMode, setViewMode] = useState<'mobile' | 'desktop'>('mobile');
   const [propertiesTab, setPropertiesTab] = useState<'props' | 'style'>('props');
 
-  // --- Tree Helpers ---
+  // --- Gateway Logic Editor ---
+
+  const renderGatewayEditor = () => {
+    // Find screens that connect TO this gateway to get potential input fields
+    const sourceScreens = allScreens.filter(s => s.connections.includes(screen.id));
+    
+    // Collect all inputs from source screens for conditions
+    const availableFields: { id: string; label: string; screenName: string }[] = [];
+    sourceScreens.forEach(s => {
+        const findInputs = (comps: UIComponent[]) => {
+            comps.forEach(c => {
+                if (['Input', 'Select', 'Checkbox', 'Switch', 'Dropdown'].includes(c.type)) {
+                    availableFields.push({ id: c.id, label: c.label || c.type, screenName: s.name });
+                }
+                if (c.children) findInputs(c.children);
+            });
+        };
+        findInputs(s.components);
+    });
+
+    const logic = screen.logic || [];
+
+    const updateLogic = (newLogic: ComponentAction[]) => {
+        onUpdateScreen({ ...screen, logic: newLogic });
+    };
+
+    const addRule = () => {
+        updateLogic([...logic, { type: 'navigate', conditions: [{ fieldId: '', operator: 'equals', value: '' }] }]);
+    };
+    
+    const removeRule = (index: number) => {
+        updateLogic(logic.filter((_, i) => i !== index));
+    };
+
+    const updateRule = (index: number, rule: ComponentAction) => {
+        const newLogic = [...logic];
+        newLogic[index] = rule;
+        updateLogic(newLogic);
+    };
+
+    return (
+        <div className="flex-1 bg-slate-900 flex flex-col items-center p-8 overflow-y-auto">
+            <div className="max-w-4xl w-full">
+                <div className="flex items-center gap-4 mb-8">
+                    <button onClick={onBack} className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 hover:text-white transition-colors">
+                        ←
+                    </button>
+                    <div>
+                        <h2 className="text-3xl font-black text-white">Gateway Logic: <span className="text-yellow-500">{screen.name}</span></h2>
+                        <p className="text-slate-400">Define routing rules based on data from previous screens.</p>
+                    </div>
+                </div>
+
+                <div className="bg-slate-800/50 rounded-xl border border-slate-700 p-6 shadow-xl space-y-6">
+                    {sourceScreens.length === 0 && (
+                        <div className="bg-yellow-500/10 border border-yellow-500/20 p-4 rounded text-yellow-200 text-sm mb-4">
+                            ⚠️ No screens connect to this Gateway yet. Connect a screen to enable data access.
+                        </div>
+                    )}
+
+                    {logic.map((rule, index) => (
+                        <div key={index} className="bg-slate-900 border border-slate-700 rounded-lg overflow-hidden animate-in fade-in slide-in-from-bottom-2">
+                             <div className="bg-slate-950 px-4 py-2 border-b border-slate-800 flex justify-between items-center">
+                                 <div className="flex items-center gap-2">
+                                     <div className={`w-3 h-3 rounded-full ${rule.conditions && rule.conditions.length > 0 ? 'bg-cyan-500' : 'bg-slate-500'}`}></div>
+                                     <span className="font-bold text-sm text-slate-300">
+                                         {rule.conditions && rule.conditions.length > 0 ? `Rule #${index + 1}` : 'Default / Fallback Route'}
+                                     </span>
+                                 </div>
+                                 <button onClick={() => removeRule(index)} className="text-slate-500 hover:text-red-400 transition-colors">Delete</button>
+                             </div>
+
+                             <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-8 items-start relative">
+                                 {/* Conditions Column */}
+                                 <div className="space-y-3">
+                                     <label className="text-xs font-bold text-slate-500 uppercase">IF Condition</label>
+                                     {rule.conditions && rule.conditions.length > 0 ? rule.conditions.map((cond, cIndex) => (
+                                         <div key={cIndex} className="flex gap-2 items-center">
+                                             <select 
+                                                className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm text-slate-200 w-full"
+                                                value={cond.fieldId}
+                                                onChange={(e) => {
+                                                    const newConds = [...(rule.conditions || [])];
+                                                    newConds[cIndex] = { ...cond, fieldId: e.target.value };
+                                                    updateRule(index, { ...rule, conditions: newConds });
+                                                }}
+                                             >
+                                                 <option value="">Select Field...</option>
+                                                 {availableFields.map(f => (
+                                                     <option key={f.id} value={f.id}>{f.label} ({f.screenName})</option>
+                                                 ))}
+                                             </select>
+
+                                             <select 
+                                                className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm text-cyan-400 font-bold w-24 shrink-0"
+                                                value={cond.operator}
+                                                onChange={(e) => {
+                                                    const newConds = [...(rule.conditions || [])];
+                                                    newConds[cIndex] = { ...cond, operator: e.target.value as any };
+                                                    updateRule(index, { ...rule, conditions: newConds });
+                                                }}
+                                             >
+                                                <option value="equals">==</option>
+                                                <option value="not_equals">!=</option>
+                                                <option value="contains">has</option>
+                                                <option value="greater_than">&gt;</option>
+                                                <option value="less_than">&lt;</option>
+                                             </select>
+
+                                             <input 
+                                                className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm text-white w-full"
+                                                placeholder="Value"
+                                                value={String(cond.value)}
+                                                onChange={(e) => {
+                                                    const newConds = [...(rule.conditions || [])];
+                                                    newConds[cIndex] = { ...cond, value: e.target.value };
+                                                    updateRule(index, { ...rule, conditions: newConds });
+                                                }}
+                                             />
+                                         </div>
+                                     )) : (
+                                         <div className="text-sm text-slate-500 italic py-1">Always execute (Else)</div>
+                                     )}
+                                     
+                                     {rule.conditions && (
+                                         <button 
+                                            className="text-xs text-cyan-400 hover:underline"
+                                            onClick={() => updateRule(index, { ...rule, conditions: [...(rule.conditions || []), { fieldId: '', operator: 'equals', value: '' }] })}
+                                        >
+                                            + AND Condition
+                                        </button>
+                                     )}
+                                 </div>
+
+                                 {/* Arrow Visual */}
+                                 <div className="hidden md:block absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-slate-600">
+                                     ➜
+                                 </div>
+
+                                 {/* Target Column */}
+                                 <div className="space-y-3">
+                                     <label className="text-xs font-bold text-slate-500 uppercase">THEN Navigate To</label>
+                                     <select 
+                                        className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-white focus:border-cyan-500 outline-none"
+                                        value={rule.targetId || ''}
+                                        onChange={(e) => updateRule(index, { ...rule, targetId: e.target.value })}
+                                     >
+                                         <option value="">Select Target Screen...</option>
+                                         {allScreens.filter(s => s.id !== screen.id).map(s => (
+                                             <option key={s.id} value={s.id}>{s.name} ({s.type === 'gateway' ? 'Gateway' : 'Screen'})</option>
+                                         ))}
+                                     </select>
+                                 </div>
+                             </div>
+                        </div>
+                    ))}
+
+                    <div className="flex gap-3 pt-4 border-t border-slate-700">
+                        <Button variant="secondary" onClick={addRule}>+ Add Conditional Route</Button>
+                        <Button variant="ghost" onClick={() => updateLogic([...logic, { type: 'navigate', conditions: [] }])}>+ Add Default Route (Else)</Button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+  };
+
+
+  // --- Standard UI Editor Tree Helpers ---
   const findComponent = (components: UIComponent[], id: string): { component: UIComponent, parent: UIComponent[] | null, index: number } | null => {
     for (let i = 0; i < components.length; i++) {
       if (components[i].id === id) {
@@ -518,122 +686,6 @@ export const ScreenEditor: React.FC<ScreenEditorProps> = ({ screen, onBack, onUp
       }
   };
 
-  const renderActionEditor = (actions: ComponentAction[] = [], onChange: (actions: ComponentAction[]) => void) => {
-      const addAction = () => onChange([...actions, { type: 'none' }]);
-      const removeAction = (index: number) => onChange(actions.filter((_, i) => i !== index));
-      const updateAction = (index: number, val: ComponentAction) => onChange(actions.map((a, i) => i === index ? val : a));
-
-      return (
-          <div className="space-y-4">
-              {actions.map((action, index) => {
-                  const targetScreen = allScreens.find(s => s.id === action.targetId);
-                  
-                  return (
-                    <div key={index} className="p-0 bg-slate-900 rounded border border-slate-700 relative overflow-hidden group">
-                        {/* Visual Logic Flow Header */}
-                        <div className="bg-slate-800 p-2 border-b border-slate-700 flex justify-between items-center">
-                            <span className="text-xs font-bold text-slate-400">Gateway {index + 1}</span>
-                            <button onClick={() => removeAction(index)} className="text-red-400 hover:text-red-300">×</button>
-                        </div>
-                        
-                        <div className="p-3">
-                            <div className="flex items-center gap-2 mb-2">
-                                <div className="w-2 h-2 rounded-full bg-cyan-500"></div>
-                                <div className="h-px bg-cyan-500 flex-1"></div>
-                                <div className="text-[10px] uppercase text-cyan-400 font-bold">Then</div>
-                            </div>
-                            
-                            {/* Action Type */}
-                            <Select 
-                                className="mb-2"
-                                value={action.type}
-                                onChange={(e) => updateAction(index, { ...action, type: e.target.value as any })}
-                                options={[
-                                    { label: 'Do Nothing', value: 'none' },
-                                    { label: 'Navigate To Screen', value: 'navigate' },
-                                    { label: 'Go Back', value: 'back' },
-                                    { label: 'Submit Form', value: 'submit' },
-                                    { label: 'Open Link', value: 'link' },
-                                ]}
-                            />
-
-                            {/* Target for Navigate */}
-                            {action.type === 'navigate' && (
-                                <div className="relative">
-                                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-cyan-500">➜</div>
-                                    <Select 
-                                        className="pl-8"
-                                        value={action.targetId || ''}
-                                        onChange={(e) => updateAction(index, { ...action, targetId: e.target.value })}
-                                        options={[
-                                            { label: 'Select Target Screen...', value: '' },
-                                            ...allScreens.filter(s => s.id !== screen.id).map(s => ({ label: s.name, value: s.id }))
-                                        ]}
-                                    />
-                                    {targetScreen && (
-                                        <div className="mt-1 text-[10px] text-slate-500 flex items-center gap-1">
-                                            <span>Destination:</span>
-                                            <span className="text-cyan-400 font-bold">{targetScreen.name}</span>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-
-                            {/* Gateway Conditions */}
-                            <div className="mt-3 pt-2 border-t border-slate-700 bg-slate-950/30 -mx-3 px-3 pb-2">
-                                <div className="flex items-center gap-2 mb-2 pt-2">
-                                    <div className="w-2 h-2 rounded-full border border-yellow-500"></div>
-                                    <div className="text-[10px] uppercase text-yellow-500 font-bold">If Condition (Optional)</div>
-                                </div>
-                                {action.conditions?.map((cond, cIndex) => (
-                                    <div key={cIndex} className="flex gap-1 mb-1 items-center bg-slate-900 p-1 rounded border border-slate-800">
-                                        <select className="bg-transparent text-slate-300 text-[10px] w-1/3 outline-none" value={cond.fieldId} onChange={(e) => {
-                                            const newConds = [...(action.conditions || [])];
-                                            newConds[cIndex] = { ...cond, fieldId: e.target.value };
-                                            updateAction(index, { ...action, conditions: newConds });
-                                        }}>
-                                            <option value="">Field...</option>
-                                            {screen.components.filter(c => ['Input', 'Select', 'Checkbox'].includes(c.type)).map(c => (
-                                                <option key={c.id} value={c.id}>{c.label}</option>
-                                            ))}
-                                        </select>
-                                        <select className="bg-transparent text-cyan-400 font-bold text-[10px] w-1/4 outline-none text-center" value={cond.operator} onChange={(e) => {
-                                                const newConds = [...(action.conditions || [])];
-                                                newConds[cIndex] = { ...cond, operator: e.target.value as any };
-                                                updateAction(index, { ...action, conditions: newConds });
-                                        }}>
-                                            <option value="equals">==</option>
-                                            <option value="not_equals">!=</option>
-                                            <option value="contains">has</option>
-                                            <option value="greater_than">&gt;</option>
-                                        </select>
-                                        <input className="bg-transparent text-white text-[10px] w-1/3 outline-none px-1" placeholder="Value" value={String(cond.value)} onChange={(e) => {
-                                                const newConds = [...(action.conditions || [])];
-                                                newConds[cIndex] = { ...cond, value: e.target.value };
-                                                updateAction(index, { ...action, conditions: newConds });
-                                        }} />
-                                        <button onClick={() => {
-                                            const newConds = action.conditions?.filter((_, i) => i !== cIndex);
-                                            updateAction(index, { ...action, conditions: newConds });
-                                        }} className="text-red-400 text-xs px-1">×</button>
-                                    </div>
-                                ))}
-                                <button 
-                                    className="text-[10px] text-slate-500 mt-1 hover:text-white flex items-center gap-1"
-                                    onClick={() => updateAction(index, { ...action, conditions: [...(action.conditions || []), { fieldId: '', operator: 'equals', value: '' }] })}
-                                >
-                                    <span>+ Add Condition</span>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                  );
-              })}
-              <Button size="sm" variant="secondary" onClick={addAction}>+ Add Logic Gateway</Button>
-          </div>
-      );
-  };
-
   const renderProperties = () => {
       const comp = getSelectedComponent();
       if (!comp) return <div className="p-8 text-center text-slate-500 text-sm">Select a component to edit</div>;
@@ -704,7 +756,35 @@ export const ScreenEditor: React.FC<ScreenEditorProps> = ({ screen, onBack, onUp
                                         ]}
                                     />
                                 </div>
-                                <div className="flex items-center gap-4">
+                                
+                                <div className="space-y-2 border-t border-slate-800 pt-4">
+                                     <Label className="text-cyan-400">Interaction</Label>
+                                     <Select 
+                                         value={comp.props?.action?.type || 'none'}
+                                         onChange={(e) => updateSelectedComponent({ props: { action: { ...comp.props?.action, type: e.target.value as any } } })}
+                                         options={[
+                                             { label: 'No Action', value: 'none' },
+                                             { label: 'Navigate To Screen/Gateway', value: 'navigate' },
+                                             { label: 'Go Back', value: 'back' },
+                                             { label: 'Submit Form', value: 'submit' }
+                                         ]}
+                                     />
+                                     {comp.props?.action?.type === 'navigate' && (
+                                         <div>
+                                             <Label>Target</Label>
+                                             <Select 
+                                                value={comp.props?.action?.targetId || ''}
+                                                onChange={(e) => updateSelectedComponent({ props: { action: { ...comp.props?.action, targetId: e.target.value } } })}
+                                                options={[
+                                                    { label: 'Select Destination...', value: '' },
+                                                    ...allScreens.filter(s => s.id !== screen.id).map(s => ({ label: `${s.name} (${s.type === 'gateway' ? 'Gateway' : 'Screen'})`, value: s.id }))
+                                                ]}
+                                             />
+                                         </div>
+                                     )}
+                                </div>
+
+                                <div className="flex items-center gap-4 mt-2">
                                      <div className="flex items-center gap-2">
                                          <input type="checkbox" checked={comp.props?.loading || false} onChange={(e) => updateSelectedComponent({ props: { loading: e.target.checked } })} />
                                          <span className="text-sm text-slate-300">Loading</span>
@@ -713,14 +793,6 @@ export const ScreenEditor: React.FC<ScreenEditorProps> = ({ screen, onBack, onUp
                                          <input type="checkbox" checked={comp.props?.disabled || false} onChange={(e) => updateSelectedComponent({ props: { disabled: e.target.checked } })} />
                                          <span className="text-sm text-slate-300">Disabled</span>
                                      </div>
-                                </div>
-                                <div>
-                                    <Label>Action Gateways</Label>
-                                    <div className="text-xs text-slate-500 mb-2">Define logic flow for this button.</div>
-                                    {renderActionEditor(
-                                        comp.props?.actions || (comp.props?.action ? [comp.props.action] : []),
-                                        (newActions) => updateSelectedComponent({ props: { actions: newActions } })
-                                    )}
                                 </div>
                              </>
                         )}
@@ -964,6 +1036,10 @@ export const ScreenEditor: React.FC<ScreenEditorProps> = ({ screen, onBack, onUp
       );
   };
 
+  if (screen.type === 'gateway') {
+      return renderGatewayEditor();
+  }
+
   return (
     <div className="flex h-full w-full bg-slate-950 text-slate-200">
       {/* --- Left Palette --- */}
@@ -1015,7 +1091,7 @@ export const ScreenEditor: React.FC<ScreenEditorProps> = ({ screen, onBack, onUp
               </button>
           </div>
 
-          <div className="flex-1 w-full flex items-center justify-center overflow-auto custom-scrollbar">
+          <div className="flex-1 w-full flex items-center justify-center overflow-auto custom-scrollbar pt-16">
               <div 
                   className={`
                       relative bg-white dark:bg-slate-950 transition-all duration-500 shadow-2xl border-8 border-slate-900

@@ -101,13 +101,17 @@ export interface UIComponent {
   children?: UIComponent[];
 }
 
+export type NodeType = 'screen' | 'gateway';
+
 export interface Screen {
   id: string;
+  type?: NodeType; // Default is 'screen'
   name: string;
   x: number;
   y: number;
   components: UIComponent[];
   connections: string[]; // IDs of screens this screen connects to
+  logic?: ComponentAction[]; // Routing rules if type is 'gateway'
 }
 
 export interface Translation {

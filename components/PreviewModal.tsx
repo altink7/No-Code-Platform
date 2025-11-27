@@ -23,6 +23,20 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({ project, onClose }) 
     }
   }, [project]);
 
+  // Gateway Execution Logic
+  useEffect(() => {
+      const screen = project.screens.find(s => s.id === currentScreenId);
+      if (screen && screen.type === 'gateway') {
+          // Execute Logic Immediately
+          if (screen.logic && screen.logic.length > 0) {
+             handleActions(screen.logic);
+          } else {
+             // Fallback if no logic defined in gateway
+             console.warn("Gateway has no logic defined.");
+          }
+      }
+  }, [currentScreenId]);
+
   const currentScreen = project.screens.find(s => s.id === currentScreenId);
 
   const handleNavigate = (targetId: string) => {
@@ -426,10 +440,16 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({ project, onClose }) 
 
             {/* Content Area */}
             <div className="flex-1 overflow-y-auto bg-slate-950 relative custom-scrollbar">
-                {currentScreen ? (
+                {currentScreen && currentScreen.type === 'screen' ? (
                     <div className="flex flex-col min-h-full">
                         {/* Render Screen Components */}
                         {currentScreen.components.map(comp => renderRuntimeComponent(comp))}
+                    </div>
+                ) : currentScreen && currentScreen.type === 'gateway' ? (
+                    <div className="flex flex-col items-center justify-center h-full text-center p-8 space-y-4">
+                        <div className="text-4xl animate-pulse">⚡</div>
+                        <h3 className="text-yellow-500 font-bold">Processing Logic...</h3>
+                        <p className="text-xs text-slate-500 font-mono">Gateway: {currentScreen.name}</p>
                     </div>
                 ) : (
                     <div className="flex items-center justify-center h-full text-slate-500">
@@ -447,4 +467,4 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({ project, onClose }) 
       </div>
     </Modal>
   );
-};
+}

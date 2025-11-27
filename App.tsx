@@ -1,6 +1,7 @@
 
+
 import React, { useState, useEffect, useCallback } from 'react';
-import { Project, AppPlatform, Step, Screen, ProjectResources, UIComponent } from './types';
+import { Project, AppPlatform, Step, Screen, ProjectResources, UIComponent, NodeType } from './types';
 import { SetupWizard, PlatformSelection } from './components/Setup';
 import { TemplateSelector } from './components/TemplateSelector';
 import { FlowView } from './components/Builder/FlowView';
@@ -138,24 +139,28 @@ export default function App() {
     });
   }, []);
 
-  const addScreen = () => {
+  const addNode = (type: NodeType = 'screen', x: number = 100, y: number = 100) => {
     if (!currentProject) return;
-    const id = `screen-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+    const id = `${type}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
     
-    // Vertical stacking logic
-    const lastScreen = currentProject.screens.length > 0 ? currentProject.screens[currentProject.screens.length - 1] : null;
-    const x = lastScreen ? lastScreen.x : 100;
-    const y = lastScreen ? lastScreen.y + 350 : 100; 
-    
-    const newScreen: Screen = {
+    // Auto positioning if manually added via button (x,y passed are from drag drop)
+    if (x === 100 && y === 100 && currentProject.screens.length > 0) {
+        const lastScreen = currentProject.screens[currentProject.screens.length - 1];
+        x = lastScreen.x;
+        y = lastScreen.y + 350;
+    }
+
+    const newNode: Screen = {
         id: id,
-        name: `Screen ${currentProject.screens.length + 1}`,
+        type: type,
+        name: type === 'gateway' ? `Gateway ${currentProject.screens.filter(s => s.type === 'gateway').length + 1}` : `Screen ${currentProject.screens.filter(s => s.type !== 'gateway').length + 1}`,
         x: x,
         y: y,
         components: [],
-        connections: []
+        connections: [],
+        logic: [] // Init empty logic for gateways
     };
-    setCurrentProject(prev => prev ? ({...prev, screens: [...prev.screens, newScreen]}) : null);
+    setCurrentProject(prev => prev ? ({...prev, screens: [...prev.screens, newNode]}) : null);
   };
 
   const addConnection = (sourceId: string, targetId: string) => {
@@ -173,77 +178,97 @@ export default function App() {
              return s;
         });
 
-        // 2. Smart Logic: Add "Back" button to Target Screen if missing
-        const targetScreenIndex = newScreens.findIndex(s => s.id === targetId);
-        if (targetScreenIndex !== -1) {
-            const targetScreen = newScreens[targetScreenIndex];
-            const hasHeader = targetScreen.components.some(c => c.type === 'Header');
-            if (!hasHeader) {
-                // Add Header with Back logic implicitly (Header component usually handles back visually)
-                // Or explicitly add a back button row
-                const backButtonId = Date.now().toString() + 'back';
-                const backGroup: UIComponent = {
-                    id: Date.now().toString() + 'header_grp',
-                    type: 'Group',
-                    label: 'Header Bar',
-                    style: { flexDirection: 'row', alignItems: 'center', padding: 10, justifyContent: 'flex-start', backgroundColor: '#1e293b' },
-                    props: {},
-                    children: [
-                        {
-                            id: backButtonId,
-                            type: 'Button',
-                            label: '← Back',
-                            props: { variant: 'ghost', action: { type: 'back' } },
-                            style: { width: 'auto', padding: 8 }
-                        }
-                    ]
-                };
-                 // Insert at top
-                 targetScreen.components = [backGroup, ...targetScreen.components];
-            }
-        }
+        // Smart Logic:
+        const sourceNode = newScreens.find(s => s.id === sourceId);
+        const targetNode = newScreens.find(s => s.id === targetId);
+        
+        // Scenario A: Screen -> Screen
+        // Scenario B: Screen -> Gateway
+        // Scenario C: Gateway -> Screen
 
-        // 3. Smart Logic: Add "Continue" button to Source Screen if missing
-        const sourceScreenIndex = newScreens.findIndex(s => s.id === sourceId);
-        if (sourceScreenIndex !== -1) {
-            const sourceScreen = newScreens[sourceScreenIndex];
+        if (sourceNode && targetNode) {
             
-            // Check if we already have a button linking to target
-            const hasLink = sourceScreen.components.some(c => {
-                 // Check root components
-                 if (c.props?.action?.targetId === targetId) return true;
-                 if (c.props?.actions?.some(a => a.targetId === targetId)) return true;
-                 // Check children
-                 if (c.children) return c.children.some(child => child.props?.action?.targetId === targetId || child.props?.actions?.some(a => a.targetId === targetId));
-                 return false;
-            });
+            // 1. If Target is Screen, Add Back Button (Unless Source is Gateway)
+            if (targetNode.type !== 'gateway' && sourceNode.type !== 'gateway') {
+                 const hasHeader = targetNode.components.some(c => c.type === 'Header');
+                 if (!hasHeader) {
+                    const backButtonId = Date.now().toString() + 'back';
+                    const backGroup: UIComponent = {
+                        id: Date.now().toString() + 'header_grp',
+                        type: 'Group',
+                        label: 'Header Bar',
+                        style: { flexDirection: 'row', alignItems: 'center', padding: 10, justifyContent: 'flex-start', backgroundColor: '#1e293b' },
+                        props: {},
+                        children: [
+                            {
+                                id: backButtonId,
+                                type: 'Button',
+                                label: '← Back',
+                                props: { variant: 'ghost', action: { type: 'back' } },
+                                style: { width: 'auto', padding: 8 }
+                            }
+                        ]
+                    };
+                    targetNode.components = [backGroup, ...targetNode.components];
+                 }
+            }
 
-            if (!hasLink) {
-                 // Look for footer group
-                 let footerGroup = sourceScreen.components.find(c => c.label === 'Footer Actions' && c.type === 'Group');
-                 
-                 const continueBtn: UIComponent = {
-                    id: Date.now().toString() + 'cont',
-                    type: 'Button',
-                    label: 'Continue',
-                    props: { variant: 'primary', action: { type: 'navigate', targetId: targetId } },
-                    style: { flex: 1 }
-                 };
+            // 2. If Source is Screen (going to Screen or Gateway), Add Continue Button
+            if (sourceNode.type !== 'gateway') {
+                 // Check if there is already a button linking to this target
+                 const hasLink = sourceNode.components.some(c => {
+                    // Check direct action
+                    if (c.props?.action?.targetId === targetId) return true;
+                    // Check logic actions (though standard buttons should use single action now)
+                    if (c.props?.actions?.some(a => a.targetId === targetId)) return true;
+                    // Check children
+                    if (c.children) return c.children.some(child => 
+                        child.props?.action?.targetId === targetId || 
+                        child.props?.actions?.some(a => a.targetId === targetId)
+                    );
+                    return false;
+                });
 
-                 if (footerGroup) {
-                      // Add to existing footer
-                      footerGroup.children = [...(footerGroup.children || []), continueBtn];
-                 } else {
-                      // Create new footer group
-                      const newFooter: UIComponent = {
-                          id: Date.now().toString() + 'footer',
-                          type: 'Group',
-                          label: 'Footer Actions',
-                          style: { flexDirection: 'row', gap: 10, marginTop: 20, paddingTop: 20, borderTopWidth: 1, borderColor: '#334155' },
-                          props: {},
-                          children: [continueBtn]
-                      };
-                      sourceScreen.components = [...sourceScreen.components, newFooter];
+                if (!hasLink) {
+                    let footerGroup = sourceNode.components.find(c => c.label === 'Footer Actions' && c.type === 'Group');
+                    
+                    const continueBtn: UIComponent = {
+                        id: Date.now().toString() + 'cont',
+                        type: 'Button',
+                        label: targetNode.type === 'gateway' ? 'Proceed' : 'Continue',
+                        props: { 
+                            variant: 'primary', 
+                            action: { type: 'navigate', targetId: targetId } 
+                        },
+                        style: { flex: 1 }
+                    };
+
+                    if (footerGroup) {
+                        footerGroup.children = [...(footerGroup.children || []), continueBtn];
+                    } else {
+                        const newFooter: UIComponent = {
+                            id: Date.now().toString() + 'footer',
+                            type: 'Group',
+                            label: 'Footer Actions',
+                            style: { flexDirection: 'row', gap: 10, marginTop: 20, paddingTop: 20, borderTopWidth: 1, borderColor: '#334155' },
+                            props: {},
+                            children: [continueBtn]
+                        };
+                        sourceNode.components = [...sourceNode.components, newFooter];
+                    }
+                }
+            }
+
+            // 3. If Source is Gateway (going to Screen), Add a Default Rule to Logic if empty
+            if (sourceNode.type === 'gateway') {
+                 if (!sourceNode.logic) sourceNode.logic = [];
+                 // If no logic exists, add a default navigation to this target
+                 if (sourceNode.logic.length === 0) {
+                     sourceNode.logic.push({
+                         type: 'navigate',
+                         targetId: targetId,
+                         conditions: [] // Empty conditions = Default / Else
+                     });
                  }
             }
         }
@@ -271,8 +296,11 @@ export default function App() {
   };
 
   const enterScreenEditor = (id: string) => {
-    setActiveScreenId(id);
-    setBuilderView('editor');
+    const screen = currentProject?.screens.find(s => s.id === id);
+    if (screen) {
+        setActiveScreenId(id);
+        setBuilderView('editor');
+    }
   };
 
   const exitScreenEditor = () => {
@@ -302,7 +330,7 @@ export default function App() {
              {step === 'builder' && (
                  <>
                     <span className="w-1 h-1 bg-slate-600 rounded-full"></span>
-                    <span className="text-cyan-400">{currentProject.screens.length} Screens</span>
+                    <span className="text-cyan-400">{currentProject.screens.length} Nodes</span>
                  </>
              )}
           </div>
@@ -371,29 +399,14 @@ export default function App() {
                 <div className="flex-1 w-full h-full relative bg-slate-950 overflow-hidden">
                     {builderView === 'flow' ? (
                         <>
-                        {/* Toolbar */}
-                        <div className="absolute top-6 left-6 z-30 flex flex-col gap-2 pointer-events-none">
-                            <div className="pointer-events-auto">
-                                <button 
-                                    onClick={addScreen} 
-                                    className="w-full px-6 py-3 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded-xl shadow-[0_0_20px_rgba(6,182,212,0.4)] border border-cyan-400 transition-all transform hover:scale-105 active:scale-95 flex items-center gap-2 justify-center"
-                                >
-                                    <span className="text-xl">+</span> Add Screen
-                                </button>
-                            </div>
-                            <div className="bg-slate-900/90 backdrop-blur p-3 rounded-lg border border-slate-700 text-xs text-slate-400 space-y-1 shadow-xl pointer-events-auto">
-                                <p>🖱️ <strong>Drag</strong> to move screens</p>
-                                <p>🔗 <strong>Drag from dot</strong> to connect</p>
-                                <p>👆 <strong>Click</strong> to edit UI</p>
-                            </div>
-                        </div>
-                        
+                        {/* Removed the top-left floating button in favor of the sidebar palette */}
                         <FlowView 
                             screens={currentProject.screens} 
                             onScreenClick={enterScreenEditor}
                             onScreenMove={moveScreen}
                             onConnect={addConnection}
                             onDisconnect={removeConnection}
+                            onAddNode={addNode}
                         />
                         </>
                     ) : (
