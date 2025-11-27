@@ -1,6 +1,7 @@
 
+
 import React, { useState } from 'react';
-import { Screen, UIComponent, COMPONENT_PALETTE, ComponentType, ComponentStyle } from '../../types';
+import { Screen, UIComponent, COMPONENT_PALETTE, ComponentType, ComponentStyle, ProjectResources, ComponentAction, Condition } from '../../types';
 import { Button, Input, Label, Select } from '../UI';
 
 interface ScreenEditorProps {
@@ -8,9 +9,10 @@ interface ScreenEditorProps {
   onBack: () => void;
   onUpdateScreen: (screen: Screen) => void;
   allScreens?: Screen[];
+  resources?: ProjectResources;
 }
 
-export const ScreenEditor: React.FC<ScreenEditorProps> = ({ screen, onBack, onUpdateScreen, allScreens = [] }) => {
+export const ScreenEditor: React.FC<ScreenEditorProps> = ({ screen, onBack, onUpdateScreen, allScreens = [], resources }) => {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [dropPosition, setDropPosition] = useState<'before' | 'after' | 'inside' | null>(null);
@@ -183,7 +185,7 @@ export const ScreenEditor: React.FC<ScreenEditorProps> = ({ screen, onBack, onUp
         componentToAdd = {
             id: Date.now().toString() + Math.random().toString().slice(2,5),
             type: type,
-            label: type === 'Header' ? screen.name : `New ${type}`,
+            label: type === 'Header' ? screen.name : type === 'File' ? 'Download File' : `New ${type}`,
             props: {},
             style: { padding: 8, margin: 4 },
             children: type === 'Group' ? [] : undefined
@@ -220,7 +222,7 @@ export const ScreenEditor: React.FC<ScreenEditorProps> = ({ screen, onBack, onUp
           const componentToAdd: UIComponent = {
             id: Date.now().toString() + Math.random().toString().slice(2,5),
             type: type,
-            label: type === 'Header' ? screen.name : `New ${type}`,
+            label: type === 'Header' ? screen.name : type === 'File' ? 'Download File' : `New ${type}`,
             props: {},
             style: { padding: 8, margin: 4 },
             children: type === 'Group' ? [] : undefined
@@ -255,11 +257,12 @@ export const ScreenEditor: React.FC<ScreenEditorProps> = ({ screen, onBack, onUp
                       ${isSelected ? 'ring-2 ring-cyan-500 z-10' : 'ring-1 ring-transparent hover:ring-slate-600'}
                   `}
                   style={{
-                      marginTop: comp.style?.margin,
-                      marginBottom: comp.style?.margin,
-                      marginLeft: comp.style?.margin,
-                      marginRight: comp.style?.margin,
+                      marginTop: comp.style?.marginTop ?? comp.style?.margin,
+                      marginBottom: comp.style?.marginBottom ?? comp.style?.margin,
+                      marginLeft: comp.style?.marginLeft ?? comp.style?.margin,
+                      marginRight: comp.style?.marginRight ?? comp.style?.margin,
                       width: comp.style?.width || 'auto',
+                      flex: comp.style?.flex ?? (comp.style?.width ? undefined : 1)
                   }}
               >
                   {isDragOver && dropPosition === 'before' && (
@@ -280,10 +283,16 @@ export const ScreenEditor: React.FC<ScreenEditorProps> = ({ screen, onBack, onUp
 
   const renderVisualComponent = (comp: UIComponent) => {
       const commonStyle = {
-          padding: comp.style?.padding || 0,
+          paddingTop: comp.style?.paddingTop ?? comp.style?.padding ?? 0,
+          paddingBottom: comp.style?.paddingBottom ?? comp.style?.padding ?? 0,
+          paddingLeft: comp.style?.paddingLeft ?? comp.style?.padding ?? 0,
+          paddingRight: comp.style?.paddingRight ?? comp.style?.padding ?? 0,
           backgroundColor: comp.style?.backgroundColor || 'transparent',
           borderRadius: comp.style?.borderRadius || 0,
-          borderWidth: comp.style?.borderWidth || 0,
+          borderTopWidth: comp.style?.borderTopWidth ?? comp.style?.borderWidth ?? 0,
+          borderBottomWidth: comp.style?.borderBottomWidth ?? comp.style?.borderWidth ?? 0,
+          borderLeftWidth: comp.style?.borderLeftWidth ?? comp.style?.borderWidth ?? 0,
+          borderRightWidth: comp.style?.borderRightWidth ?? comp.style?.borderWidth ?? 0,
           borderColor: comp.style?.borderColor || 'transparent',
           boxShadow: comp.style?.boxShadow || 'none'
       };
@@ -330,6 +339,21 @@ export const ScreenEditor: React.FC<ScreenEditorProps> = ({ screen, onBack, onUp
           );
       }
 
+      // Resolution of text label (translation or direct)
+      let displayText = comp.label;
+      if (comp.props?.translationKey && resources?.translations) {
+          const t = resources.translations.find(t => t.key === comp.props?.translationKey);
+          // Default to first lang or key if active lang not found
+          if (t) displayText = t.values[resources.defaultLanguage || 'en'] || Object.values(t.values)[0] || t.key;
+      }
+
+      // Resolution of image src (asset or direct)
+      let displaySrc = comp.props?.src;
+      if (comp.props?.assetId && resources?.assets) {
+          const a = resources.assets.find(a => a.id === comp.props?.assetId);
+          if (a) displaySrc = a.url;
+      }
+
       switch(comp.type) {
           case 'Button':
               return (
@@ -337,9 +361,12 @@ export const ScreenEditor: React.FC<ScreenEditorProps> = ({ screen, onBack, onUp
                     className={`w-full font-medium transition-all pointer-events-none flex items-center justify-center gap-2 ${comp.props?.disabled ? 'opacity-50' : ''}`}
                     style={{
                         ...commonStyle,
-                        backgroundColor: comp.props?.variant === 'secondary' ? '#334155' : '#0891b2',
-                        color: 'white',
-                        padding: comp.style?.padding || 12,
+                        backgroundColor: comp.props?.variant === 'ghost' ? 'transparent' : comp.props?.variant === 'secondary' ? '#334155' : '#0891b2',
+                        color: comp.props?.variant === 'ghost' ? '#94a3b8' : 'white',
+                        paddingTop: comp.style?.paddingTop ?? comp.style?.padding ?? 12,
+                        paddingBottom: comp.style?.paddingBottom ?? comp.style?.padding ?? 12,
+                        paddingLeft: comp.style?.paddingLeft ?? comp.style?.padding ?? 12,
+                        paddingRight: comp.style?.paddingRight ?? comp.style?.padding ?? 12,
                         borderRadius: comp.style?.borderRadius || 8
                     }}
                 >
@@ -349,14 +376,27 @@ export const ScreenEditor: React.FC<ScreenEditorProps> = ({ screen, onBack, onUp
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
                     )}
-                    {comp.label}
+                    {displayText}
                 </button>
+              );
+          case 'File':
+              return (
+                <div style={commonStyle} className="p-3 bg-slate-800 rounded-lg border border-slate-700 flex items-center gap-3 w-full cursor-pointer hover:border-cyan-500 transition-colors">
+                     <div className="w-10 h-10 bg-slate-900 rounded flex items-center justify-center text-xl">
+                         📁
+                     </div>
+                     <div className="flex-1">
+                         <div className="font-bold text-sm text-white">{displayText}</div>
+                         <div className="text-xs text-slate-400">{comp.props?.fileName || 'No file linked'}</div>
+                     </div>
+                     <div className="text-cyan-400">⬇</div>
+                </div>
               );
           case 'Input':
           case 'TextArea':
               return (
                 <div style={commonStyle}>
-                     <label className="block text-xs font-bold text-slate-500 mb-1">{comp.label} {comp.props?.validation?.required && <span className="text-red-400">*</span>}</label>
+                     <label className="block text-xs font-bold text-slate-500 mb-1">{displayText} {comp.props?.validation?.required && <span className="text-red-400">*</span>}</label>
                      <div className={`w-full px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-700 rounded text-sm text-slate-300 ${comp.type === 'TextArea' ? 'h-20' : ''}`}>
                          {comp.props?.inputType === 'password' ? '••••••••' : (comp.props?.placeholder || 'Type here...')}
                      </div>
@@ -365,22 +405,22 @@ export const ScreenEditor: React.FC<ScreenEditorProps> = ({ screen, onBack, onUp
            case 'Image':
                 return (
                     <div className="w-full aspect-video bg-slate-800 rounded-xl overflow-hidden border-2 border-dashed border-slate-700 relative" style={commonStyle}>
-                        {comp.props?.src ? (
+                        {displaySrc ? (
                             <img 
-                                src={comp.props.src} 
-                                alt={comp.label} 
+                                src={displaySrc} 
+                                alt={displayText} 
                                 className="w-full h-full"
                                 style={{ objectFit: comp.props?.objectFit || 'cover' }}
                             />
                         ) : (
                             <div className="flex items-center justify-center w-full h-full">
-                                <span className="text-xs text-slate-500">{comp.label}</span>
+                                <span className="text-xs text-slate-500">{displayText}</span>
                             </div>
                         )}
                     </div>
                 );
             case 'Card':
-                const elevationClass = {
+                const elevationClass: any = {
                     'none': 'shadow-none',
                     'sm': 'shadow-sm',
                     'md': 'shadow-md',
@@ -390,7 +430,7 @@ export const ScreenEditor: React.FC<ScreenEditorProps> = ({ screen, onBack, onUp
                 return (
                     <div className={`bg-slate-800 rounded-xl p-4 space-y-2 border border-slate-700 ${elevationClass[comp.props?.elevation || 'md'] || 'shadow-md'}`} style={commonStyle}>
                         {comp.props?.showImage !== false && <div className="h-32 bg-slate-700 rounded-lg w-full mb-2"></div>}
-                        <h4 className="font-bold text-slate-200">{comp.label}</h4>
+                        <h4 className="font-bold text-slate-200">{displayText}</h4>
                         <div className="h-2 w-2/3 bg-slate-700 rounded"></div>
                     </div>
                 );
@@ -400,13 +440,13 @@ export const ScreenEditor: React.FC<ScreenEditorProps> = ({ screen, onBack, onUp
                         <div className={`w-5 h-5 rounded border border-slate-600 flex items-center justify-center ${comp.props?.defaultChecked ? 'bg-cyan-500 border-cyan-500' : 'bg-slate-800'}`}>
                             {comp.props?.defaultChecked && <span className="text-white text-xs">✓</span>}
                         </div>
-                        <span className="text-sm text-slate-300">{comp.label}</span>
+                        <span className="text-sm text-slate-300">{displayText}</span>
                     </div>
                 );
             case 'Switch':
                 return (
                      <div className="flex items-center justify-between" style={commonStyle}>
-                         <span className="text-sm text-slate-300">{comp.label}</span>
+                         <span className="text-sm text-slate-300">{displayText}</span>
                          <div className={`w-10 h-6 rounded-full p-1 transition-colors ${comp.props?.defaultChecked ? 'bg-cyan-500' : 'bg-slate-700'}`}>
                              <div className={`w-4 h-4 bg-white rounded-full transition-transform ${comp.props?.defaultChecked ? 'translate-x-4' : ''}`}></div>
                          </div>
@@ -416,7 +456,7 @@ export const ScreenEditor: React.FC<ScreenEditorProps> = ({ screen, onBack, onUp
                 return (
                     <div style={commonStyle}>
                          <div className="flex justify-between mb-1">
-                             <span className="text-xs font-bold text-slate-500">{comp.label}</span>
+                             <span className="text-xs font-bold text-slate-500">{displayText}</span>
                              <span className="text-xs text-slate-400">{comp.props?.value || 50}</span>
                          </div>
                          <div className="w-full h-1.5 bg-slate-700 rounded-lg overflow-hidden relative">
@@ -434,7 +474,7 @@ export const ScreenEditor: React.FC<ScreenEditorProps> = ({ screen, onBack, onUp
                 return (
                     <div style={commonStyle} className="inline-block">
                         <span className={`px-2 py-0.5 rounded text-xs font-medium border ${badgeColors[comp.props?.variant || 'info']}`}>
-                            {comp.label}
+                            {displayText}
                         </span>
                     </div>
                 );
@@ -444,8 +484,8 @@ export const ScreenEditor: React.FC<ScreenEditorProps> = ({ screen, onBack, onUp
                          <div className="bg-slate-700 rounded-full flex items-center justify-center overflow-hidden border border-slate-600"
                             style={{ width: comp.props?.size || 48, height: comp.props?.size || 48 }}
                          >
-                            {comp.props?.src ? (
-                                <img src={comp.props.src} alt="avatar" className="w-full h-full object-cover" />
+                            {displaySrc ? (
+                                <img src={displaySrc} alt="avatar" className="w-full h-full object-cover" />
                             ) : (
                                 <span className="text-slate-400 font-bold text-lg">A</span>
                             )}
@@ -460,22 +500,138 @@ export const ScreenEditor: React.FC<ScreenEditorProps> = ({ screen, onBack, onUp
                   <div style={{...commonStyle, color: comp.style?.color}}>
                      {comp.type === 'Text' && (
                          <p className={`pointer-events-none ${comp.props?.size === 'lg' ? 'text-xl font-bold' : 'text-sm'}`} style={{ textAlign: comp.props?.align }}>
-                             {comp.label}
+                             {displayText}
                          </p>
                      )}
                      {comp.type === 'Header' && (
                           <div className="flex items-center justify-between shadow-sm border-b border-slate-700/50 p-4 bg-slate-800" style={commonStyle}>
                             <div className="w-6 h-6 bg-slate-700 rounded-full"></div>
-                            <span className="font-bold text-lg text-white">{comp.label}</span>
+                            <span className="font-bold text-lg text-white">{displayText}</span>
                             <div className="w-6 h-6 bg-slate-700 rounded-full"></div>
                         </div>
                      )}
                      {!['Text', 'Header'].includes(comp.type) && (
-                         <div className="p-2 border border-slate-700 rounded text-slate-400 text-xs">{comp.type}: {comp.label}</div>
+                         <div className="p-2 border border-slate-700 rounded text-slate-400 text-xs">{comp.type}: {displayText}</div>
                      )}
                   </div>
                )
       }
+  };
+
+  const renderActionEditor = (actions: ComponentAction[] = [], onChange: (actions: ComponentAction[]) => void) => {
+      const addAction = () => onChange([...actions, { type: 'none' }]);
+      const removeAction = (index: number) => onChange(actions.filter((_, i) => i !== index));
+      const updateAction = (index: number, val: ComponentAction) => onChange(actions.map((a, i) => i === index ? val : a));
+
+      return (
+          <div className="space-y-4">
+              {actions.map((action, index) => {
+                  const targetScreen = allScreens.find(s => s.id === action.targetId);
+                  
+                  return (
+                    <div key={index} className="p-0 bg-slate-900 rounded border border-slate-700 relative overflow-hidden group">
+                        {/* Visual Logic Flow Header */}
+                        <div className="bg-slate-800 p-2 border-b border-slate-700 flex justify-between items-center">
+                            <span className="text-xs font-bold text-slate-400">Gateway {index + 1}</span>
+                            <button onClick={() => removeAction(index)} className="text-red-400 hover:text-red-300">×</button>
+                        </div>
+                        
+                        <div className="p-3">
+                            <div className="flex items-center gap-2 mb-2">
+                                <div className="w-2 h-2 rounded-full bg-cyan-500"></div>
+                                <div className="h-px bg-cyan-500 flex-1"></div>
+                                <div className="text-[10px] uppercase text-cyan-400 font-bold">Then</div>
+                            </div>
+                            
+                            {/* Action Type */}
+                            <Select 
+                                className="mb-2"
+                                value={action.type}
+                                onChange={(e) => updateAction(index, { ...action, type: e.target.value as any })}
+                                options={[
+                                    { label: 'Do Nothing', value: 'none' },
+                                    { label: 'Navigate To Screen', value: 'navigate' },
+                                    { label: 'Go Back', value: 'back' },
+                                    { label: 'Submit Form', value: 'submit' },
+                                    { label: 'Open Link', value: 'link' },
+                                ]}
+                            />
+
+                            {/* Target for Navigate */}
+                            {action.type === 'navigate' && (
+                                <div className="relative">
+                                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-cyan-500">➜</div>
+                                    <Select 
+                                        className="pl-8"
+                                        value={action.targetId || ''}
+                                        onChange={(e) => updateAction(index, { ...action, targetId: e.target.value })}
+                                        options={[
+                                            { label: 'Select Target Screen...', value: '' },
+                                            ...allScreens.filter(s => s.id !== screen.id).map(s => ({ label: s.name, value: s.id }))
+                                        ]}
+                                    />
+                                    {targetScreen && (
+                                        <div className="mt-1 text-[10px] text-slate-500 flex items-center gap-1">
+                                            <span>Destination:</span>
+                                            <span className="text-cyan-400 font-bold">{targetScreen.name}</span>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Gateway Conditions */}
+                            <div className="mt-3 pt-2 border-t border-slate-700 bg-slate-950/30 -mx-3 px-3 pb-2">
+                                <div className="flex items-center gap-2 mb-2 pt-2">
+                                    <div className="w-2 h-2 rounded-full border border-yellow-500"></div>
+                                    <div className="text-[10px] uppercase text-yellow-500 font-bold">If Condition (Optional)</div>
+                                </div>
+                                {action.conditions?.map((cond, cIndex) => (
+                                    <div key={cIndex} className="flex gap-1 mb-1 items-center bg-slate-900 p-1 rounded border border-slate-800">
+                                        <select className="bg-transparent text-slate-300 text-[10px] w-1/3 outline-none" value={cond.fieldId} onChange={(e) => {
+                                            const newConds = [...(action.conditions || [])];
+                                            newConds[cIndex] = { ...cond, fieldId: e.target.value };
+                                            updateAction(index, { ...action, conditions: newConds });
+                                        }}>
+                                            <option value="">Field...</option>
+                                            {screen.components.filter(c => ['Input', 'Select', 'Checkbox'].includes(c.type)).map(c => (
+                                                <option key={c.id} value={c.id}>{c.label}</option>
+                                            ))}
+                                        </select>
+                                        <select className="bg-transparent text-cyan-400 font-bold text-[10px] w-1/4 outline-none text-center" value={cond.operator} onChange={(e) => {
+                                                const newConds = [...(action.conditions || [])];
+                                                newConds[cIndex] = { ...cond, operator: e.target.value as any };
+                                                updateAction(index, { ...action, conditions: newConds });
+                                        }}>
+                                            <option value="equals">==</option>
+                                            <option value="not_equals">!=</option>
+                                            <option value="contains">has</option>
+                                            <option value="greater_than">&gt;</option>
+                                        </select>
+                                        <input className="bg-transparent text-white text-[10px] w-1/3 outline-none px-1" placeholder="Value" value={String(cond.value)} onChange={(e) => {
+                                                const newConds = [...(action.conditions || [])];
+                                                newConds[cIndex] = { ...cond, value: e.target.value };
+                                                updateAction(index, { ...action, conditions: newConds });
+                                        }} />
+                                        <button onClick={() => {
+                                            const newConds = action.conditions?.filter((_, i) => i !== cIndex);
+                                            updateAction(index, { ...action, conditions: newConds });
+                                        }} className="text-red-400 text-xs px-1">×</button>
+                                    </div>
+                                ))}
+                                <button 
+                                    className="text-[10px] text-slate-500 mt-1 hover:text-white flex items-center gap-1"
+                                    onClick={() => updateAction(index, { ...action, conditions: [...(action.conditions || []), { fieldId: '', operator: 'equals', value: '' }] })}
+                                >
+                                    <span>+ Add Condition</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                  );
+              })}
+              <Button size="sm" variant="secondary" onClick={addAction}>+ Add Logic Gateway</Button>
+          </div>
+      );
   };
 
   const renderProperties = () => {
@@ -515,9 +671,21 @@ export const ScreenEditor: React.FC<ScreenEditorProps> = ({ screen, onBack, onUp
               <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
                   {propertiesTab === 'props' ? (
                       <>
+                        {/* Global Text Label & Translation */}
                         <div>
                             <Label>Label / Text</Label>
-                            <Input value={comp.label} onChange={(e) => updateSelectedComponent({ label: e.target.value })} />
+                            <Input value={comp.label} onChange={(e) => updateSelectedComponent({ label: e.target.value })} className="mb-2" />
+                            {resources && resources.translations.length > 0 && (
+                                <Select 
+                                    value={comp.props?.translationKey || ''}
+                                    onChange={(e) => updateSelectedComponent({ props: { translationKey: e.target.value } })}
+                                    options={[
+                                        { label: 'Use Direct Text', value: '' },
+                                        ...resources.translations.map(t => ({ label: `🌐 ${t.key}`, value: t.key }))
+                                    ]}
+                                    className="text-xs py-1"
+                                />
+                            )}
                         </div>
                         
                         {/* Button Config */}
@@ -547,27 +715,38 @@ export const ScreenEditor: React.FC<ScreenEditorProps> = ({ screen, onBack, onUp
                                      </div>
                                 </div>
                                 <div>
-                                    <Label>On Click Action</Label>
-                                    <Select 
-                                        value={comp.props?.action?.type === 'navigate' ? comp.props?.action.targetId : (comp.props?.action?.type || 'none')}
-                                        onChange={(e) => {
-                                            const val = e.target.value;
-                                            if (val === 'none') {
-                                                updateSelectedComponent({ props: { action: undefined } });
-                                            } else if (val === 'submit') {
-                                                updateSelectedComponent({ props: { action: { type: 'submit' } } });
-                                            } else {
-                                                updateSelectedComponent({ props: { action: { type: 'navigate', targetId: val } } });
-                                            }
-                                        }}
-                                        options={[
-                                            { label: 'No Action', value: 'none' },
-                                            { label: 'Submit Form', value: 'submit' },
-                                            ...allScreens.filter(s => s.id !== screen.id).map(s => ({ label: `Navigate to: ${s.name}`, value: s.id }))
-                                        ]}
-                                    />
+                                    <Label>Action Gateways</Label>
+                                    <div className="text-xs text-slate-500 mb-2">Define logic flow for this button.</div>
+                                    {renderActionEditor(
+                                        comp.props?.actions || (comp.props?.action ? [comp.props.action] : []),
+                                        (newActions) => updateSelectedComponent({ props: { actions: newActions } })
+                                    )}
                                 </div>
                              </>
+                        )}
+
+                        {/* File Config */}
+                        {comp.type === 'File' && (
+                            <div>
+                                <Label>Linked File</Label>
+                                {resources && resources.assets.filter(a => a.type === 'file').length > 0 ? (
+                                    <Select 
+                                        value={comp.props?.fileId || ''}
+                                        onChange={(e) => {
+                                            const asset = resources.assets.find(a => a.id === e.target.value);
+                                            updateSelectedComponent({ props: { fileId: e.target.value, fileName: asset?.name } });
+                                        }}
+                                        options={[
+                                            { label: 'Select File...', value: '' },
+                                            ...resources.assets.filter(a => a.type === 'file').map(a => ({ label: `📄 ${a.name}`, value: a.id }))
+                                        ]}
+                                    />
+                                ) : (
+                                    <div className="text-xs text-yellow-500 bg-yellow-500/10 p-2 rounded">
+                                        No files uploaded. Go to Resources to upload files.
+                                    </div>
+                                )}
+                            </div>
                         )}
 
                         {/* Input/TextArea Config */}
@@ -629,25 +808,23 @@ export const ScreenEditor: React.FC<ScreenEditorProps> = ({ screen, onBack, onUp
                             </>
                         )}
 
-                        {/* Dropdown Config */}
-                        {comp.type === 'Dropdown' && (
-                            <div>
-                                <Label>Options (comma separated)</Label>
-                                <textarea
-                                    className="w-full bg-slate-950/50 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-cyan-500 h-24"
-                                    value={comp.props?.options?.join(',') || ''}
-                                    onChange={(e) => updateSelectedComponent({ props: { options: e.target.value.split(',').map(s => s.trim()) } })}
-                                    placeholder="Option 1, Option 2, Option 3"
-                                />
-                            </div>
-                        )}
-
                         {/* Image/Avatar Config */}
                         {(comp.type === 'Image' || comp.type === 'Avatar') && (
                             <>
                                 <div>
                                     <Label>Source URL</Label>
-                                    <Input value={comp.props?.src || ''} onChange={(e) => updateSelectedComponent({ props: { src: e.target.value } })} placeholder="https://..." />
+                                    <Input value={comp.props?.src || ''} onChange={(e) => updateSelectedComponent({ props: { src: e.target.value, assetId: undefined } })} placeholder="https://..." className="mb-2"/>
+                                    {resources && resources.assets.filter(a => a.type === 'image').length > 0 && (
+                                        <Select 
+                                            value={comp.props?.assetId || ''}
+                                            onChange={(e) => updateSelectedComponent({ props: { assetId: e.target.value, src: '' } })}
+                                            options={[
+                                                { label: 'Use Direct URL', value: '' },
+                                                ...resources.assets.filter(a => a.type === 'image').map(a => ({ label: `🖼️ ${a.name}`, value: a.id }))
+                                            ]}
+                                            className="text-xs py-1"
+                                        />
+                                    )}
                                 </div>
                                 {comp.type === 'Image' && (
                                     <div>
@@ -657,50 +834,12 @@ export const ScreenEditor: React.FC<ScreenEditorProps> = ({ screen, onBack, onUp
                                             onChange={(e) => updateSelectedComponent({ props: { objectFit: e.target.value } })}
                                             options={[
                                                 { label: 'Cover', value: 'cover' },
-                                                { label: 'Contain', value: 'contain' },
-                                                { label: 'Fill', value: 'fill' }
+                                                { label: 'Contain', value: 'fill' }
                                             ]}
                                         />
                                     </div>
                                 )}
-                                {comp.type === 'Avatar' && (
-                                    <div>
-                                        <Label>Size (px)</Label>
-                                        <input 
-                                            type="number" 
-                                            className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-sm text-white"
-                                            value={comp.props?.size || 48} 
-                                            onChange={(e) => updateSelectedComponent({ props: { size: parseInt(e.target.value) } })} 
-                                        />
-                                    </div>
-                                )}
                             </>
-                        )}
-
-                        {/* Slider Config */}
-                        {comp.type === 'Slider' && (
-                            <div className="grid grid-cols-3 gap-2">
-                                <div>
-                                    <Label>Min</Label>
-                                    <input type="number" className="w-full bg-slate-900 border-slate-700 rounded text-sm text-white px-1" value={comp.props?.min || 0} onChange={(e) => updateSelectedComponent({ props: { min: parseInt(e.target.value) } })} />
-                                </div>
-                                <div>
-                                    <Label>Max</Label>
-                                    <input type="number" className="w-full bg-slate-900 border-slate-700 rounded text-sm text-white px-1" value={comp.props?.max || 100} onChange={(e) => updateSelectedComponent({ props: { max: parseInt(e.target.value) } })} />
-                                </div>
-                                <div>
-                                    <Label>Value</Label>
-                                    <input type="number" className="w-full bg-slate-900 border-slate-700 rounded text-sm text-white px-1" value={comp.props?.value || 50} onChange={(e) => updateSelectedComponent({ props: { value: parseInt(e.target.value) } })} />
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Switch/Checkbox Config */}
-                        {(comp.type === 'Switch' || comp.type === 'Checkbox') && (
-                             <div className="flex items-center gap-2">
-                                 <input type="checkbox" checked={comp.props?.defaultChecked || false} onChange={(e) => updateSelectedComponent({ props: { defaultChecked: e.target.checked } })} />
-                                 <span className="text-sm text-slate-300">Checked by default</span>
-                             </div>
                         )}
                         
                         {/* Group Config */}
@@ -710,54 +849,7 @@ export const ScreenEditor: React.FC<ScreenEditorProps> = ({ screen, onBack, onUp
                                     <input type="checkbox" checked={comp.props?.collapsible || false} onChange={(e) => updateSelectedComponent({ props: { collapsible: e.target.checked } })} />
                                     <span className="text-sm text-slate-300">Collapsible</span>
                                 </div>
-                                {comp.props?.collapsible && (
-                                     <div className="flex items-center gap-2 ml-4">
-                                        <input type="checkbox" checked={comp.props?.collapsed || false} onChange={(e) => updateSelectedComponent({ props: { collapsed: e.target.checked } })} />
-                                        <span className="text-sm text-slate-300">Start Collapsed</span>
-                                    </div>
-                                )}
                             </>
-                        )}
-
-                        {/* Card Config */}
-                        {comp.type === 'Card' && (
-                            <>
-                                <div>
-                                    <Label>Elevation</Label>
-                                    <Select 
-                                        value={comp.props?.elevation || 'md'}
-                                        onChange={(e) => updateSelectedComponent({ props: { elevation: e.target.value } })}
-                                        options={[
-                                            { label: 'None', value: 'none' },
-                                            { label: 'Small', value: 'sm' },
-                                            { label: 'Medium', value: 'md' },
-                                            { label: 'Large', value: 'lg' },
-                                            { label: 'Extra Large', value: 'xl' }
-                                        ]}
-                                    />
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <input type="checkbox" checked={comp.props?.showImage !== false} onChange={(e) => updateSelectedComponent({ props: { showImage: e.target.checked } })} />
-                                    <span className="text-sm text-slate-300">Show Cover Image</span>
-                                </div>
-                            </>
-                        )}
-                        
-                        {/* Badge Config */}
-                        {comp.type === 'Badge' && (
-                            <div>
-                                <Label>Variant</Label>
-                                <Select 
-                                    value={comp.props?.variant || 'info'}
-                                    onChange={(e) => updateSelectedComponent({ props: { variant: e.target.value } })}
-                                    options={[
-                                        { label: 'Info (Blue)', value: 'info' },
-                                        { label: 'Success (Green)', value: 'success' },
-                                        { label: 'Warning (Yellow)', value: 'warning' },
-                                        { label: 'Error (Red)', value: 'error' }
-                                    ]}
-                                />
-                            </div>
                         )}
                       </>
                   ) : (
@@ -862,20 +954,6 @@ export const ScreenEditor: React.FC<ScreenEditorProps> = ({ screen, onBack, onUp
                                 <div className="flex gap-2 items-center">
                                      <input type="color" className="w-8 h-8 rounded cursor-pointer bg-transparent border-0" value={comp.style?.color || '#ffffff'} onChange={(e) => updateSelectedComponent({ style: { color: e.target.value } })} />
                                      <span className="text-xs text-slate-400">Text Color</span>
-                                </div>
-                            </div>
-                            
-                            <div>
-                                <Label>Borders</Label>
-                                <div className="grid grid-cols-2 gap-2">
-                                    <div className="space-y-1">
-                                        <span className="text-[10px] text-slate-500">Radius</span>
-                                        <input type="number" className="w-full bg-slate-900 border border-slate-700 rounded p-1 text-sm text-white" value={comp.style?.borderRadius || 0} onChange={(e) => updateSelectedComponent({ style: { borderRadius: parseInt(e.target.value) } })} />
-                                    </div>
-                                    <div className="space-y-1">
-                                        <span className="text-[10px] text-slate-500">Width</span>
-                                        <input type="number" className="w-full bg-slate-900 border border-slate-700 rounded p-1 text-sm text-white" value={comp.style?.borderWidth || 0} onChange={(e) => updateSelectedComponent({ style: { borderWidth: parseInt(e.target.value) } })} />
-                                    </div>
                                 </div>
                             </div>
                         </div>

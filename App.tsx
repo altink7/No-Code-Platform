@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Project, AppPlatform, Step, Screen } from './types';
+import { Project, AppPlatform, Step, Screen, ProjectResources, UIComponent } from './types';
 import { SetupWizard, PlatformSelection } from './components/Setup';
 import { TemplateSelector } from './components/TemplateSelector';
 import { FlowView } from './components/Builder/FlowView';
@@ -10,6 +10,7 @@ import { ExportModal } from './components/ExportModal';
 import { PreviewModal } from './components/PreviewModal';
 import { HelpModal } from './components/HelpModal';
 import { Dashboard } from './components/Dashboard';
+import { ResourceManager } from './components/ResourceManager';
 
 export default function App() {
   // Global State
@@ -24,6 +25,7 @@ export default function App() {
   const [isExporting, setIsExporting] = useState(false);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [showResources, setShowResources] = useState(false);
 
   // Load projects from local storage on mount
   useEffect(() => {
@@ -64,6 +66,12 @@ export default function App() {
       },
       font: { name: 'Inter', family: 'sans-serif' },
       screens: [],
+      resources: { 
+        translations: [], 
+        assets: [],
+        languages: ['en'],
+        defaultLanguage: 'en'
+      },
       lastModified: Date.now()
     };
     setCurrentProject(newProject);
@@ -105,7 +113,7 @@ export default function App() {
     if (!currentProject) return;
     setCurrentProject({ ...currentProject, template: templateId, screens });
     
-    // Add new project to list if not already there (though handleCreateNew handles init, this confirms it)
+    // Add new project to list if not already there
     if (!projects.find(p => p.id === currentProject.id)) {
         setProjects(prev => [...prev, { ...currentProject, template: templateId, screens }]);
     }
@@ -137,7 +145,7 @@ export default function App() {
     // Vertical stacking logic
     const lastScreen = currentProject.screens.length > 0 ? currentProject.screens[currentProject.screens.length - 1] : null;
     const x = lastScreen ? lastScreen.x : 100;
-    const y = lastScreen ? lastScreen.y + 350 : 100; // Increased spacing for vertical stack
+    const y = lastScreen ? lastScreen.y + 350 : 100; 
     
     const newScreen: Screen = {
         id: id,
@@ -152,16 +160,96 @@ export default function App() {
 
   const addConnection = (sourceId: string, targetId: string) => {
     if (sourceId === targetId || !currentProject) return;
-    setCurrentProject(prev => prev ? ({
-      ...prev,
-      screens: prev.screens.map(s => {
-        if (s.id === sourceId) {
-            if (s.connections.includes(targetId)) return s;
-            return { ...s, connections: [...s.connections, targetId] };
+
+    setCurrentProject(prev => {
+        if (!prev) return null;
+
+        // 1. Update Connection IDs
+        const newScreens = prev.screens.map(s => {
+             if (s.id === sourceId) {
+                if (s.connections.includes(targetId)) return s;
+                return { ...s, connections: [...s.connections, targetId] };
+             }
+             return s;
+        });
+
+        // 2. Smart Logic: Add "Back" button to Target Screen if missing
+        const targetScreenIndex = newScreens.findIndex(s => s.id === targetId);
+        if (targetScreenIndex !== -1) {
+            const targetScreen = newScreens[targetScreenIndex];
+            const hasHeader = targetScreen.components.some(c => c.type === 'Header');
+            if (!hasHeader) {
+                // Add Header with Back logic implicitly (Header component usually handles back visually)
+                // Or explicitly add a back button row
+                const backButtonId = Date.now().toString() + 'back';
+                const backGroup: UIComponent = {
+                    id: Date.now().toString() + 'header_grp',
+                    type: 'Group',
+                    label: 'Header Bar',
+                    style: { flexDirection: 'row', alignItems: 'center', padding: 10, justifyContent: 'flex-start', backgroundColor: '#1e293b' },
+                    props: {},
+                    children: [
+                        {
+                            id: backButtonId,
+                            type: 'Button',
+                            label: '← Back',
+                            props: { variant: 'ghost', action: { type: 'back' } },
+                            style: { width: 'auto', padding: 8 }
+                        }
+                    ]
+                };
+                 // Insert at top
+                 targetScreen.components = [backGroup, ...targetScreen.components];
+            }
         }
-        return s;
-      })
-    }) : null);
+
+        // 3. Smart Logic: Add "Continue" button to Source Screen if missing
+        const sourceScreenIndex = newScreens.findIndex(s => s.id === sourceId);
+        if (sourceScreenIndex !== -1) {
+            const sourceScreen = newScreens[sourceScreenIndex];
+            
+            // Check if we already have a button linking to target
+            const hasLink = sourceScreen.components.some(c => {
+                 // Check root components
+                 if (c.props?.action?.targetId === targetId) return true;
+                 if (c.props?.actions?.some(a => a.targetId === targetId)) return true;
+                 // Check children
+                 if (c.children) return c.children.some(child => child.props?.action?.targetId === targetId || child.props?.actions?.some(a => a.targetId === targetId));
+                 return false;
+            });
+
+            if (!hasLink) {
+                 // Look for footer group
+                 let footerGroup = sourceScreen.components.find(c => c.label === 'Footer Actions' && c.type === 'Group');
+                 
+                 const continueBtn: UIComponent = {
+                    id: Date.now().toString() + 'cont',
+                    type: 'Button',
+                    label: 'Continue',
+                    props: { variant: 'primary', action: { type: 'navigate', targetId: targetId } },
+                    style: { flex: 1 }
+                 };
+
+                 if (footerGroup) {
+                      // Add to existing footer
+                      footerGroup.children = [...(footerGroup.children || []), continueBtn];
+                 } else {
+                      // Create new footer group
+                      const newFooter: UIComponent = {
+                          id: Date.now().toString() + 'footer',
+                          type: 'Group',
+                          label: 'Footer Actions',
+                          style: { flexDirection: 'row', gap: 10, marginTop: 20, paddingTop: 20, borderTopWidth: 1, borderColor: '#334155' },
+                          props: {},
+                          children: [continueBtn]
+                      };
+                      sourceScreen.components = [...sourceScreen.components, newFooter];
+                 }
+            }
+        }
+
+        return { ...prev, screens: newScreens };
+    });
   };
 
   const removeConnection = (sourceId: string, targetId: string) => {
@@ -175,6 +263,11 @@ export default function App() {
         return s;
       })
     }) : null);
+  };
+
+  const updateResources = (newResources: ProjectResources) => {
+      if (!currentProject) return;
+      setCurrentProject({ ...currentProject, resources: newResources });
   };
 
   const enterScreenEditor = (id: string) => {
@@ -225,10 +318,13 @@ export default function App() {
            </button>
            {view === 'builder' && step === 'builder' && (
              <>
-                <Button variant="secondary" size="sm" onClick={() => setIsPreviewing(true)}>
-                    ▶ Preview App
+                <Button variant="ghost" size="sm" onClick={() => setShowResources(true)}>
+                    Resources
                 </Button>
-                <Button variant="neon" size="sm" onClick={() => setIsExporting(true)}>Export Code</Button>
+                <Button variant="secondary" size="sm" onClick={() => setIsPreviewing(true)}>
+                    ▶ Preview
+                </Button>
+                <Button variant="neon" size="sm" onClick={() => setIsExporting(true)}>Export</Button>
              </>
            )}
         </div>
@@ -302,10 +398,11 @@ export default function App() {
                         </>
                     ) : (
                         <ScreenEditor 
-                        screen={currentProject.screens.find(s => s.id === activeScreenId)!} 
-                        onBack={exitScreenEditor}
-                        onUpdateScreen={updateScreen}
-                        allScreens={currentProject.screens}
+                            screen={currentProject.screens.find(s => s.id === activeScreenId)!} 
+                            onBack={exitScreenEditor}
+                            onUpdateScreen={updateScreen}
+                            allScreens={currentProject.screens}
+                            resources={currentProject.resources}
                         />
                     )}
                 </div>
@@ -331,6 +428,14 @@ export default function App() {
 
       {showHelp && (
           <HelpModal onClose={() => setShowHelp(false)} />
+      )}
+
+      {showResources && currentProject && (
+          <ResourceManager 
+            resources={currentProject.resources}
+            onUpdate={updateResources}
+            onClose={() => setShowResources(false)}
+          />
       )}
     </div>
   );

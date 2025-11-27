@@ -1,4 +1,5 @@
 
+
 export type AppPlatform = 'web' | 'mobile';
 
 export interface AppColors {
@@ -16,14 +17,26 @@ export interface AppFont {
 export type ComponentType = 
   | 'Button' | 'Input' | 'Text' | 'Image' | 'Card' | 'Header' | 'List' 
   | 'Map' | 'Group' | 'Dropdown' | 'Checkbox' | 'Switch' | 'Slider' 
-  | 'Avatar' | 'Badge' | 'Divider' | 'TextArea';
+  | 'Avatar' | 'Badge' | 'Divider' | 'TextArea' | 'File';
 
 export interface ComponentStyle {
   padding?: number;
+  paddingTop?: number;
+  paddingBottom?: number;
+  paddingLeft?: number;
+  paddingRight?: number;
   margin?: number;
+  marginTop?: number;
+  marginBottom?: number;
+  marginLeft?: number;
+  marginRight?: number;
   backgroundColor?: string;
   borderRadius?: number;
   borderWidth?: number;
+  borderTopWidth?: number;
+  borderBottomWidth?: number;
+  borderLeftWidth?: number;
+  borderRightWidth?: number;
   borderColor?: string;
   fontSize?: number;
   fontWeight?: 'normal' | 'bold' | 'light';
@@ -31,11 +44,12 @@ export interface ComponentStyle {
   width?: string | number;
   height?: string | number;
   justifyContent?: 'flex-start' | 'center' | 'flex-end' | 'space-between';
-  alignItems?: 'flex-start' | 'center' | 'flex-end';
+  alignItems?: 'flex-start' | 'center' | 'flex-end' | 'stretch';
   flexDirection?: 'row' | 'column';
   flexWrap?: 'wrap' | 'nowrap';
   gap?: number;
   boxShadow?: string;
+  flex?: number | string;
 }
 
 export interface ComponentValidation {
@@ -45,10 +59,17 @@ export interface ComponentValidation {
   errorMessage?: string;
 }
 
+export interface Condition {
+  fieldId: string;
+  operator: 'equals' | 'not_equals' | 'contains' | 'greater_than' | 'less_than' | 'is_true' | 'is_false';
+  value: string | number | boolean;
+}
+
 export interface ComponentAction {
-  type: 'navigate' | 'link' | 'submit' | 'none';
+  type: 'navigate' | 'link' | 'submit' | 'back' | 'none';
   targetId?: string; // Screen ID for navigate
   url?: string;      // URL for link
+  conditions?: Condition[]; // Gateway Logic
 }
 
 export interface UIComponent {
@@ -56,7 +77,8 @@ export interface UIComponent {
   type: ComponentType;
   props: Record<string, any> & {
       validation?: ComponentValidation;
-      action?: ComponentAction;
+      action?: ComponentAction; // Legacy single action
+      actions?: ComponentAction[]; // Multiple actions for Gateways
       // Input Specific
       inputType?: 'text' | 'password' | 'email' | 'number' | 'date';
       // Button Specific
@@ -65,6 +87,12 @@ export interface UIComponent {
       icon?: string;
       // Image Specific
       objectFit?: 'cover' | 'contain' | 'fill';
+      assetId?: string; // Link to Resource Asset
+      // File Specific
+      fileId?: string; // Link to Resource File
+      fileName?: string;
+      // Text Specific
+      translationKey?: string; // Link to Resource Translation
       // Card Specific
       elevation?: 'none' | 'sm' | 'md' | 'lg' | 'xl';
   };
@@ -82,6 +110,25 @@ export interface Screen {
   connections: string[]; // IDs of screens this screen connects to
 }
 
+export interface Translation {
+  key: string;
+  values: Record<string, string>; // { "en": "Hello", "es": "Hola" }
+}
+
+export interface Asset {
+  id: string;
+  name: string;
+  url: string;
+  type: 'image' | 'file';
+}
+
+export interface ProjectResources {
+  languages: string[]; // ['en', 'es', 'fr']
+  defaultLanguage: string;
+  translations: Translation[];
+  assets: Asset[];
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -91,8 +138,11 @@ export interface Project {
   colors: AppColors;
   font: AppFont;
   screens: Screen[];
+  resources: ProjectResources;
   lastModified: number;
 }
+
+export interface SavedProject extends Project {}
 
 export type Step = 'setup' | 'platform' | 'template' | 'builder';
 export type BuilderView = 'flow' | 'editor';
@@ -113,4 +163,5 @@ export const COMPONENT_PALETTE: { type: ComponentType; label: string; icon: stri
   { type: 'Badge', label: 'Badge', icon: 'M7 7h10v10H7z' },
   { type: 'Divider', label: 'Divider', icon: 'M4 12h16' },
   { type: 'Image', label: 'Image', icon: 'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01' },
+  { type: 'File', label: 'File Download', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
 ];
